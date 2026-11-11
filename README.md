@@ -9,7 +9,7 @@
 
 ## 運作方式
 
-`.github/workflows/update.yml` 每小時執行 `scripts/fetch.mjs`，把資料整理成 `data/*.json`，連同網頁一起發布到 GitHub Pages。網頁只讀這些檔案，金鑰不會出現在網頁裡。
+`.github/workflows/update.yml` 每半小時執行 `scripts/fetch.mjs`，把資料整理成 `data/*.json`，連同網頁一起發布到 GitHub Pages。網頁只讀這些檔案，金鑰不會出現在網頁裡。
 
 ## 設定
 

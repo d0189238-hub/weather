@@ -813,7 +813,7 @@ function fromData(T, D) {
   return {
     sample: false,
     time: o && o.time ? o.time.slice(11, 16) : (D.updated || "").slice(11, 16),
-    source: "資料來源：中央氣象署" + (o ? "（觀測站：" + o.station + "）" : "") + (a ? "、環境部（測站：" + a.site + "）" : "") + "。預報每天更新 4 次，觀測與空氣品質每小時更新。",
+    source: "資料來源：中央氣象署" + (o ? "（觀測站：" + o.station + "）" : "") + (a ? "、環境部（測站：" + a.site + "）" : "") + "。本頁每半小時抓一次最新資料；預報內容以氣象署發布為準，空氣品質為環境部每小時發布。",
     cur: {
       temp: o && o.temp != null ? o.temp : h0.temp, feels: h0.feels, hum: o ? o.rh : null, precip: o && o.rain != null ? o.rain : 0,
       wind: o ? o.ws : null, wdir: o ? o.wd : null, code: h0.code, desc: h0.text, isDay: nowDay, uv: nowDay ? uvOf(today) : 0
@@ -979,6 +979,21 @@ $("a-ok").addEventListener("click", () => {
 
 load();
 setView(location.hash.slice(1));
+
+/* 開著不關、或從背景切回來時，自動換成最新資料 */
+let lastLoad = Date.now();
+async function refresh() {
+  if (Date.now() - lastLoad < 10 * 60e3) return;
+  lastLoad = Date.now();
+  const p = places[active];
+  for (const k in dataCache) delete dataCache[k];
+  try {
+    const D = await countyData(p.c), T = D.towns[p.t];
+    if (T && places[active] === p) render(fromData(T, D));
+  } catch (e) {}
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+setInterval(() => { if (!document.hidden) refresh(); }, 5 * 60e3);
 
 /* 鄉鎮名單以氣象署資料為準 */
 fetch("data/towns.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).then(t => {
