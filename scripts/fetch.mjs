@@ -191,6 +191,37 @@ async function main() {
   }
   if (CWA) for (let i = 0; i < names.length; i += 4) await Promise.all(names.slice(i, i + 4).map(county));
 
+  // 衛星雲圖（臺灣範圍）：先問檔案 API 拿圖檔位址，再把圖存成網站自己的檔案
+  const sat = {};
+  const findUrl = o => {
+    if (typeof o === "string") return /^https?:\/\/\S+\.(jpe?g|png)(\?\S*)?$/i.test(o) ? o : null;
+    if (o && typeof o === "object") for (const k in o) { const u = findUrl(o[k]); if (u) return u; }
+    return null;
+  };
+  const findTime = o => {
+    if (o && typeof o === "object") for (const k in o) {
+      if (/^(datetime|obstime)$/i.test(k) && typeof o[k] === "string") return o[k];
+      const t = findTime(o[k]); if (t) return t;
+    }
+    return null;
+  };
+  if (CWA) for (const [key, id] of [["ir", "O-C0042-002"], ["vis", "O-C0042-008"]]) {
+    try {
+      const j = await getJSON("https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/" + id + "?Authorization=" + encodeURIComponent(CWA) + "&downloadType=WEB&format=JSON");
+      const u = findUrl(j);
+      if (!u) throw new Error("找不到圖檔位址");
+      const r = await fetch(u, { signal: AbortSignal.timeout(60000) });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length < 5000) throw new Error("圖檔太小");
+      const file = "sat-" + key + (/\.png/i.test(u) ? ".png" : ".jpg");
+      await writeFile(OUT + "/" + file, buf);
+      sat[key] = { file, time: findTime(j) };
+      status.seen["sat-" + key] = buf.length;
+    } catch (e) { fail("衛星雲圖 " + id, e); }
+  }
+  await writeFile(OUT + "/sat.json", JSON.stringify(sat));
+
   status.totalTowns = Object.values(status.counties).reduce((a, b) => a + b, 0);
   status.finished = new Date().toISOString();
   if (Object.keys(towns).length) await writeFile(OUT + "/towns.json", JSON.stringify(towns));

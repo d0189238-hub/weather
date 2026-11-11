@@ -184,6 +184,12 @@ main:not([data-view="weather"]) .v-weather, main[data-view="home"] .v-sub { disp
 .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: .4; transition: transform .2s, opacity .2s; }
 .dots .on i { background: var(--ink); opacity: 1; transform: scale(1.3); }
 main { touch-action: pan-y; }
+.sat-h { display: flex; justify-content: space-between; align-items: center; gap: var(--s2); }
+.sat-t { display: flex; gap: 4px; }
+.sat-t button { font: inherit; font-size: 16px; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 18px; background: none; color: var(--muted); cursor: pointer; }
+.sat-t button.on { border-color: var(--ink); color: var(--ink); }
+#sat-sec[hidden] { display: none; }
+#sat-img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--cloth2); }
 .top.v-sub { color: var(--ink); justify-content: flex-start; }
 .top.v-sub strong { font-size: 20px; font-weight: 600; min-width: 0; }
 #back { white-space: nowrap; flex: none; }
@@ -343,6 +349,12 @@ main { touch-action: pan-y; }
       <div class="axis"><span>日出 <b id="rise"></b></span><span class="muted" id="daylen"></span><span>日落 <b id="set"></b></span></div>
       <div class="daybar"><i id="sunpos"></i></div>
     </div>
+  </section>
+
+  <section class="v-home" id="sat-sec" hidden>
+    <div class="sat-h"><h2>衛星雲圖</h2><span class="sat-t" id="sat-tabs"></span></div>
+    <img id="sat-img" alt="臺灣附近的衛星雲圖" loading="lazy">
+    <span class="muted" id="sat-time"></span>
   </section>
 
   <!-- 天氣詳細 -->
@@ -980,6 +992,27 @@ $("a-ok").addEventListener("click", () => {
 load();
 setView(location.hash.slice(1));
 
+/* ---------- 衛星雲圖 ---------- */
+let satKind = "ir";
+async function loadSat() {
+  try {
+    const r = await fetch("data/sat.json", { cache: "no-cache" });
+    if (!r.ok) return;
+    const S = await r.json(), names = { ir: "紅外線", vis: "可見光" }, have = Object.keys(names).filter(k => S[k]);
+    if (!have.length) return;
+    if (!S[satKind]) satKind = have[0];
+    const show = () => {
+      const x = S[satKind], t = x.time ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(x.time) ? x.time : x.time.replace(" ", "T") + "Z") : null;
+      $("sat-img").src = "data/" + x.file + "?t=" + encodeURIComponent(x.time || Date.now());
+      $("sat-time").textContent = (t && !isNaN(t) ? "觀測時間 " + hhmm(new Date(t.getTime() + 8 * 3600e3).getUTCHours() * 60 + new Date(t.getTime() + 8 * 3600e3).getUTCMinutes()) + "・" : "") + (satKind === "vis" ? "可見光在晚上是黑的" : "越白越亮的地方，雲越高越厚");
+      $("sat-tabs").innerHTML = have.length > 1 ? have.map(k => `<button type="button" class="${k === satKind ? "on" : ""}" data-k="${k}">${names[k]}</button>`).join("") : "";
+    };
+    $("sat-tabs").onclick = e => { const b = e.target.closest("[data-k]"); if (b) { satKind = b.dataset.k; show(); } };
+    show(); $("sat-sec").hidden = false;
+  } catch (e) {}
+}
+loadSat();
+
 /* 開著不關、或從背景切回來時，自動換成最新資料 */
 let lastLoad = Date.now();
 async function refresh() {
@@ -991,6 +1024,7 @@ async function refresh() {
     const D = await countyData(p.c), T = D.towns[p.t];
     if (T && places[active] === p) render(fromData(T, D));
   } catch (e) {}
+  loadSat();
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 setInterval(() => { if (!document.hidden) refresh(); }, 5 * 60e3);
