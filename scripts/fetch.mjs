@@ -376,7 +376,8 @@ async function main() {
       status.seen[id] = list.length;
     } catch (e) { fail("地震 " + id, e); }
   }
-  quakes.sort((a, b) => Date.parse(String(b.time).replace(" ", "T") + "+08:00") - Date.parse(String(a.time).replace(" ", "T") + "+08:00"));
+  const qt = v => { const t = String(v || ""); return Date.parse(/[+-]\d\d:?\d\d$|Z$/.test(t) ? t : t.replace(" ", "T") + "+08:00"); };
+  quakes.sort((a, b) => qt(b.time) - qt(a.time));
   await writeFile(OUT + "/quake.json", JSON.stringify({ list: quakes.slice(0, 10) }));
 
   // ---------- 颱風路徑（有颱風時才有資料）----------
@@ -397,6 +398,10 @@ async function main() {
           r7: radius(ci(f, "circleOf15Ms")), r10: radius(ci(f, "circleOf25Ms")), prob: num(ci(f, "radiusOf70PercentProbability")) };
       };
       const tcs = arr(ci(ci(ci(j, "records"), "tropicalCyclones"), "tropicalCyclone"));
+      if (tcs[0]) {
+        const fa = arr(ci(ci(tcs[0], "analysisData"), "fix")), ff = arr(ci(ci(tcs[0], "forecastData"), "fix"));
+        status.seen.typhoonFix = { a: fa.length, aLast: fa[fa.length - 1] || null, f: ff.length, f0: ff[0] || null };
+      }
       for (const tc of tcs) {
         const past = arr(ci(ci(tc, "analysisData"), "fix")).map(f => fixOf(f)).filter(Boolean);
         const base = past.length ? past[past.length - 1].t : null;
