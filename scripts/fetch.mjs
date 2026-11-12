@@ -538,7 +538,21 @@ async function main() {
         const X = pick(/^griddimensionx$/i) || 921, Y = pick(/^griddimensiony$/i) || 881;
         const lon0 = pick(/^startpointlongitude$/i) || 115, lat0 = pick(/^startpointlatitude$/i) || 18, res = pick(/^gridresolution$/i) || 0.0125;
         const time = findKey(j, /^(datetime|obstime|date)$/i);
-        if (v.length === X * Y) grid = { v, X, Y, lon0, lat0, res, time, flip: false };
+        if (v.length === X * Y) {
+          // 排除異常：超過 75 dBZ 視為無效；整排幾乎都有值的格點列（資料雜訊）整排清掉
+          let bad = 0;
+          for (let i = 0; i < v.length; i++) if (v[i] >= 75) v[i] = -99;
+          for (let y = 0; y < Y; y++) {
+            let n = 0; for (let x = 0; x < X; x++) if (v[y * X + x] >= 10) n++;
+            if (n > X * 0.6) { bad++; for (let x = 0; x < X; x++) v[y * X + x] = -99; }
+          }
+          for (let x = 0; x < X; x++) {
+            let n = 0; for (let y = 0; y < Y; y++) if (v[y * X + x] >= 10) n++;
+            if (n > Y * 0.6) { bad++; for (let y = 0; y < Y; y++) v[y * X + x] = -99; }
+          }
+          status.seen.gridBadLines = bad;
+          grid = { v, X, Y, lon0, lat0, res, time, flip: false };
+        }
         status.seen.radarGrid = { n: v.length, X, Y, lon0, lat0, res, time, max: v.reduce((m, x) => x < 100 && x > m ? x : m, -999) };
       } else status.seen.radarGrid = "no content";
     } catch (e) { fail("雷達格點", e); }

@@ -323,8 +323,8 @@ main { touch-action: pan-y; }
 .lme { position: absolute; top: 10px; right: 10px; z-index: 1000; font: inherit; font-size: 15px; padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(0,0,0,.25); background: rgba(255,255,255,.92); color: #1c2a33; cursor: pointer; }
 .leaflet-container { font: inherit; }
 .lmap.plain { background: #eef0ec; }
-.lmap.plain .bline { filter: grayscale(1) brightness(.55); }
-.lmap:not(.plain) .bline { filter: grayscale(1) brightness(4); }
+.lmap.plain .bline { filter: grayscale(1); }
+.lmap:not(.plain) .bline { filter: grayscale(1) invert(1) brightness(1.15); }
 .mlab { background: none; border: 0; }
 .mlab span { display: block; transform: translate(-50%, -50%); white-space: nowrap; font-weight: 700; color: #fff; text-shadow: 0 0 3px rgba(0,0,0,.85), 0 0 1px #000; pointer-events: none; }
 .mlab.county span { font-size: 15px; letter-spacing: .1em; }
@@ -1836,7 +1836,7 @@ async function ensureMap() {
   $("rmap").hidden = false; $("radar-link").hidden = true; $("base-tabs").hidden = false;
   const nl = l => `https://wmts.nlsc.gov.tw/wmts/${l}/default/GoogleMapsCompatible/{z}/{y}/{x}`;
   const attr = '圖資 <a href="https://maps.nlsc.gov.tw/" target="_blank" rel="noopener">內政部國土測繪中心</a>｜雷達 中央氣象署';
-  // 只用純空拍照片＋縣市、鄉鎮界線，不放道路與編號；地名由我們自己標
+  // 只用純空拍照片＋縣市、鄉鎮界線（界線圖層本身附地名），不放道路與編號
   const lines = () => [L.tileLayer(nl("CITY"), { maxZoom: 18, opacity: .95, className: "bline" }), L.tileLayer(nl("TOWN"), { maxZoom: 18, minZoom: 9, opacity: .6, className: "bline" })];
   LBASE.photo = L.layerGroup([L.tileLayer(nl("PHOTO2"), { maxZoom: 18, attribution: attr }), ...lines()]);
   LBASE.map = L.layerGroup([L.tileLayer("data:image/gif;base64,R0lGODlhAQABAAAAACw=", { maxZoom: 18, attribution: attr }), ...lines()]);
@@ -1848,9 +1848,6 @@ async function ensureMap() {
   LOV = L.imageOverlay("data/" + RG.frames[RG.frames.length - 1].file, RG.bounds, { opacity: 0.72, className: "rgov", interactive: false }).addTo(LMAP);
   LMARK = L.layerGroup().addTo(LMAP);
   LMEL = L.layerGroup().addTo(LMAP);
-  LLAB = L.layerGroup().addTo(LMAP);
-  LMAP.on("zoomend moveend", drawLabels);
-  fetch("data/towncoords.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).then(j => { TC = j; drawLabels(); }).catch(() => {});
   rgMode = true;
   $("layer-chips").hidden = false;
   drawMapMarks();
