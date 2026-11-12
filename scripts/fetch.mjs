@@ -278,6 +278,19 @@ async function main() {
     }
   }
   await writeFile(OUT + "/maps.json", JSON.stringify(maps));
+  if (CWA && process.env.SAT_DIAG) {
+    const out = {};
+    for (let n = 1; n <= 16; n++) {
+      const id = "O-C0042-" + String(n).padStart(3, "0");
+      try {
+        const j = await fileapi(id), u = findUrl(j, IMG);
+        let size = null, type = null;
+        if (u) { const h = await fetch(u, { method: "HEAD", signal: AbortSignal.timeout(20000) }); size = h.headers.get("content-length"); type = h.headers.get("content-type"); }
+        out[id] = { name: findKey(j, /^(datasetdescription|description|title|name)$/i), time: findKey(j, /^(datetime|obstime|date)$/i), u: u ? u.replace(/Authorization=[^&]+/, "") : null, size, type, lon: findKey(j, /^longituderange$/i), lat: findKey(j, /^latituderange$/i) };
+      } catch (e) { out[id] = String(e.message || e).slice(0, 80); }
+    }
+    status.seen.satDiag = out;
+  }
 
   // 閃電：過去 1 小時的閃電位置（KMZ 壓縮檔）
   const light = { time: null, pts: [], ok: false };
