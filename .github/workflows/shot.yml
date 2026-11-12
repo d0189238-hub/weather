@@ -7,11 +7,16 @@ jobs:
       - env:
           K: ${{ secrets.CWA_KEY }}
         run: |
-          for n in $(seq -w 3 40); do id=F-C0032-0$n
-            r=$(curl -sL -m 20 "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/$id?Authorization=$K&downloadType=WEB&format=JSON")
-            echo "== $id $(echo "$r" | head -c 1500 | tr '\n' ' ')"
+          for id in F-C0032-029 F-C0032-021 F-C0032-026; do
+            echo "== $id"; curl -sL -m 20 "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/$id?Authorization=$K&downloadType=WEB&format=JSON" | python3 -c "import sys,json,re;s=json.dumps(json.load(sys.stdin),ensure_ascii=False);[print('TXT',x) for x in re.findall(r'\"(?:WeatherDescription|Description|Value|value|Content)\": \"([^\"]{20,})\"',s)]"
           done
-          for id in F-A0012-001 F-C0033-001 F-C0034-001 F-C0034-005; do
-            r=$(curl -sL -m 20 "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/$id?Authorization=$K&downloadType=WEB&format=JSON")
-            echo "== $id $(echo "$r" | head -c 1500 | tr '\n' ' ')"
-          done
+          echo "== 031"; curl -sL -m 20 "https://cwaopendata.s3.ap-northeast-1.amazonaws.com/Forecast/F-C0032-031.FW50" | iconv -f big5 -t utf-8 2>/dev/null | sed 's/^/TXT /' | head -60
+          echo "== 005"; curl -sL -m 20 "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/F-C0032-005?Authorization=$K&downloadType=WEB&format=JSON" | python3 -c "
+          import sys,json
+          j=json.load(sys.stdin)['cwaopendata']['dataset']
+          for L in j['location']:
+            if L['locationName'] not in ('雲林縣','臺中市','南投縣'): continue
+            el={e['elementName']:e['time'] for e in L['weatherElement']}
+            for i,t in enumerate(el['Wx']):
+              print('W',L['locationName'],t['startTime'][5:13],t['parameter']['parameterName'],'|',el['MaxT'][i]['parameter']['parameterName'],el['MinT'][i]['parameter']['parameterName'])
+          "
