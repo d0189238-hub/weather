@@ -31,7 +31,10 @@ jobs:
           OUT_DIR: _site/data
         run: node scripts/fetch.mjs
       - name: 整理網站檔案
-        run: cp -r index.html manifest.webmanifest icons _site/
+        run: |
+          cp -r index.html manifest.webmanifest icons _site/
+          sed -i "s/__BUILD__/${GITHUB_SHA}/" _site/index.html
+          echo "{\"v\":\"${GITHUB_SHA}\"}" > _site/version.json
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

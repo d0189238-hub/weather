@@ -117,7 +117,11 @@ svg.ic .wet { stroke: var(--rain); }
 .panel-in { max-width: 520px; margin: 0 auto; padding: var(--s2) 20px var(--s3); display: flex; flex-direction: column; gap: var(--s3); }
 .ptitle { font-size: var(--t1); font-weight: 600; }
 .plist { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
-.prow { display: flex; align-items: center; gap: var(--s1); border-bottom: 1px solid var(--line); }
+.prow { display: flex; align-items: center; gap: var(--s1); border-bottom: 1px solid var(--line); background: var(--paper); position: relative; }
+.prow.drag { z-index: 2; box-shadow: 0 6px 18px rgba(0,0,0,.25); border-radius: 6px; transition: none !important; }
+.prow.shift { transition: transform .15s; }
+.grip { flex: none; width: 44px; height: 52px; display: grid; place-items: center; color: var(--muted); touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.phint { font-size: 15px; color: var(--muted); margin-top: -16px; }
 .pick {
   flex: 1; min-width: 0; display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 12px;
   padding: 14px 0; font: inherit; color: inherit; background: none; border: 0; text-align: left; cursor: pointer;
@@ -189,6 +193,10 @@ main { touch-action: pan-y; }
 .sat-t button { font: inherit; font-size: 16px; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 18px; background: none; color: var(--muted); cursor: pointer; }
 .sat-t button.on { border-color: var(--ink); color: var(--ink); }
 .v-obs[hidden], #obs-home[hidden] { display: none; }
+.zoom { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 20; background: #000; overflow: hidden; touch-action: none; }
+.zoom[hidden] { display: none; }
+.zoom img { position: absolute; top: 50%; left: 50%; max-width: 100vw; max-height: 100vh; transform-origin: 0 0; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; }
+.zbar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); color: #ddd; font-size: 15px; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
 .map { position: relative; display: block; border-radius: 8px; overflow: hidden; background: var(--cloth2); }
 .map img { display: block; width: 100%; height: auto; min-height: 120px; }
 .map svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -478,11 +486,16 @@ main { touch-action: pan-y; }
     <span class="cap" id="rank-cap"></span>
   </section>
   <section class="v-obs">
-    <p class="cap">點圖可以放大看原圖。資料來源：中央氣象署。</p>
+    <p class="cap">點圖可以全螢幕放大，兩指張開再放大、單指拖曳移動。資料來源：中央氣象署。</p>
   </section>
 
   <p class="note" id="note"></p>
 </main>
+
+<div class="zoom" id="zoom" role="dialog" aria-label="放大檢視" hidden>
+  <img id="zoom-img" alt="">
+  <div class="zbar"><span id="zoom-tip">兩指張開放大，點兩下切換放大</span><button type="button" class="btn" id="zoom-close">關閉</button></div>
+</div>
 
 <div class="panel" id="panel" role="dialog" aria-label="我的地點" hidden>
   <div class="panel-in">
@@ -491,6 +504,7 @@ main { touch-action: pan-y; }
       <button type="button" class="btn ghost" id="p-close">關閉</button>
     </div>
     <div class="plist" id="p-list"></div>
+    <p class="phint" id="p-hint">按住左邊的 ≡ 上下拖，可以調整順序；左右滑的順序跟這裡一樣。</p>
     <button type="button" class="btn ghost" id="p-edit">編輯清單</button>
     <div class="padd">
       <span class="muted">新增地點</span>
@@ -890,8 +904,8 @@ function fromData(T, D) {
   const h0 = hours[0], o = T.o, a = T.a, nowDay = nowMin >= sun.rise && nowMin < sun.set;
   return {
     sample: false,
-    time: o && o.time ? o.time.slice(11, 16) : (D.updated || "").slice(11, 16),
-    source: "資料來源：中央氣象署" + (o ? "（觀測站：" + o.station + "）" : "") + (a ? "、環境部（測站：" + a.site + "）" : "") + "。本頁每半小時抓一次最新資料；預報內容以氣象署發布為準，空氣品質為環境部每小時發布。",
+    time: (D.updated || (o && o.time) || "").slice(11, 16),
+    source: "資料來源：中央氣象署" + (o ? "（觀測站：" + o.station + (o.time ? "，" + o.time.slice(11, 16) + " 觀測" : "") + "）" : "") + (a ? "、環境部（測站：" + a.site + "）" : "") + "。本頁每半小時抓一次最新資料；預報內容以氣象署發布為準，空氣品質為環境部每小時發布。",
     cur: {
       temp: o && o.temp != null ? o.temp : h0.temp, feels: h0.feels, hum: o ? o.rh : null, precip: o && o.rain != null ? o.rain : 0,
       wind: o ? o.ws : null, wdir: o ? o.wd : null, code: h0.code, desc: h0.text, isDay: nowDay, uv: nowDay ? uvOf(today) : 0
@@ -997,9 +1011,10 @@ $("dots").addEventListener("click", e => {
 function renderPlaces() {
   $("p-edit").textContent = editing ? "完成" : "編輯清單";
   $("p-edit").hidden = places.length < 2;
+  $("p-hint").hidden = places.length < 2;
   $("p-list").innerHTML = places.map((p, i) => {
     const s = sample(COUNTY[p.c].lat, seedOf(pname(p))).cur;
-    return `<div class="prow"><button type="button" class="pick" data-i="${i}">${icon(s.code, s.isDay)}` +
+    return `<div class="prow"><span class="grip" data-g="${i}" role="button" aria-label="拖曳調整 ${pname(p)} 的順序"><svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><button type="button" class="pick" data-i="${i}">${icon(s.code, s.isDay)}` +
       `<b>${pname(p)}${i === active ? "<small>目前顯示</small>" : ""}</b><span class="t" id="pt-${i}">${Math.round(s.temp)}°</span></button>` +
       `<button type="button" class="btn ghost" data-d="${i}"${editing && places.length > 1 ? "" : " hidden"}>移除</button></div>`;
   }).join("");
@@ -1044,6 +1059,48 @@ $("p-list").addEventListener("click", e => {
   }
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("panel").hidden) closePanel(); });
+
+/* 拖曳調整地點順序 */
+(() => {
+  const list = $("p-list");
+  let drag = null;
+  list.addEventListener("pointerdown", e => {
+    const g = e.target.closest("[data-g]");
+    if (!g || places.length < 2) return;
+    e.preventDefault();
+    const rows = [...list.children], row = g.closest(".prow"), from = rows.indexOf(row);
+    const rc = row.getBoundingClientRect();
+    drag = { rows, row, from, to: from, y0: e.clientY, h: rc.height, c0: rc.top + rc.height / 2, mids: rows.map(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; }), id: e.pointerId };
+    try { g.setPointerCapture(e.pointerId); } catch (x) {}
+    rows.forEach(r => { if (r !== row) r.classList.add("shift"); });
+    row.classList.add("drag");
+  });
+  list.addEventListener("pointermove", e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dy = e.clientY - drag.y0, { rows, row, from, h } = drag;
+    const c = drag.c0 + dy, to = drag.mids.filter((m, i) => i !== from && m < c).length;
+    drag.to = to;
+    row.style.transform = `translateY(${dy}px)`;
+    rows.forEach((r, i) => {
+      if (r === row) return;
+      const off = from < to && i > from && i <= to ? -h : from > to && i < from && i >= to ? h : 0;
+      r.style.transform = off ? `translateY(${off}px)` : "";
+    });
+  });
+  const end = e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const { from, to } = drag; drag = null;
+    if (from !== to) {
+      const cur = places[active], moved = places.splice(from, 1)[0];
+      places.splice(to, 0, moved);
+      active = places.indexOf(cur);
+      savePlaces(); renderDots();
+    }
+    renderPlaces();
+  };
+  list.addEventListener("pointerup", end);
+  list.addEventListener("pointercancel", end);
+})();
 
 const selC = $("a-county"), selT = $("a-town");
 Object.keys(COUNTY).forEach(c => selC.add(new Option(c, c)));
@@ -1138,6 +1195,58 @@ function drawObs() {
     $("rank-cap").textContent = "全臺測站，今天 0 點到 " + twTime(O.time) + "；雨量單位是毫米。";
   }
 }
+/* 放大檢視：兩指縮放、單指拖曳、點兩下切換 */
+(() => {
+  const box = $("zoom"), img = $("zoom-img");
+  let sc = 1, tx = 0, ty = 0, base = null, pts = new Map(), g = null, lastTap = 0;
+  const apply = () => { img.style.transform = `translate(${tx}px, ${ty}px) scale(${sc})`; };
+  const fit = () => {
+    const w = img.naturalWidth || 1, h = img.naturalHeight || 1, W = innerWidth, H = innerHeight;
+    const f = Math.min(W / w, H / h); img.style.width = w * f + "px"; img.style.height = h * f + "px";
+    img.style.top = "0"; img.style.left = "0"; img.style.maxWidth = "none"; img.style.maxHeight = "none";
+    base = { w: w * f, h: h * f }; sc = 1; tx = (W - base.w) / 2; ty = (H - base.h) / 2; apply();
+  };
+  const clamp = () => {
+    const W = innerWidth, H = innerHeight, w = base.w * sc, h = base.h * sc;
+    tx = w <= W ? (W - w) / 2 : Math.min(0, Math.max(W - w, tx));
+    ty = h <= H ? (H - h) / 2 : Math.min(0, Math.max(H - h, ty));
+  };
+  const zoomAt = (ns, cx, cy) => { ns = Math.max(1, Math.min(8, ns)); tx = cx - (cx - tx) * ns / sc; ty = cy - (cy - ty) * ns / sc; sc = ns; clamp(); apply(); };
+  window.openZoom = (src, alt) => {
+    img.onload = fit; img.alt = alt || ""; img.src = src; box.hidden = false; document.body.style.overflow = "hidden";
+    if (img.complete && img.naturalWidth) fit();
+    $("zoom-close").focus();
+  };
+  const close = () => { box.hidden = true; document.body.style.overflow = ""; pts.clear(); };
+  $("zoom-close").addEventListener("click", close);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !box.hidden) close(); });
+  box.addEventListener("pointerdown", e => {
+    if (e.target.closest(".zbar")) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { box.setPointerCapture(e.pointerId); } catch (x) {}
+    g = null;
+    if (pts.size === 1) {
+      const now = Date.now();
+      if (now - lastTap < 300) { zoomAt(sc > 1.5 ? 1 : 3, e.clientX, e.clientY); lastTap = 0; } else lastTap = now;
+    }
+  });
+  box.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return;
+    const prev = pts.get(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size >= 2) {
+      const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      if (g) { tx += cx - g.cx; ty += cy - g.cy; zoomAt(sc * d / g.d, cx, cy); }
+      g = { d, cx, cy };
+    } else if (sc > 1) { tx += e.clientX - prev.x; ty += e.clientY - prev.y; clamp(); apply(); }
+  });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) g = null; };
+  box.addEventListener("pointerup", up); box.addEventListener("pointercancel", up);
+  window.addEventListener("resize", () => { if (!box.hidden) fit(); });
+  document.querySelectorAll(".map").forEach(a => a.addEventListener("click", e => {
+    if (!a.href) return;
+    e.preventDefault(); const im = a.querySelector("img"); openZoom(a.href, im ? im.alt : "");
+  }));
+})();
 $("sat-tabs").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) { satKind = b.dataset.k; drawObs(); } });
 async function loadObs() {
   const get = f => fetch("data/" + f, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null);
@@ -1146,6 +1255,23 @@ async function loadObs() {
   drawObs();
 }
 loadObs();
+
+/* 網站有新版本就自動換新（避免手機一直用舊的頁面） */
+const BUILD = "__BUILD__";
+async function checkVersion() {
+  if (BUILD.indexOf("BUILD") >= 0) return;
+  try {
+    const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return;
+    const v = (await r.json()).v;
+    if (v && v !== BUILD && store.get("reloadedFor") !== v) {
+      store.set("reloadedFor", v);
+      location.replace(location.pathname + "?v=" + v.slice(0, 7) + location.hash);
+    }
+  } catch (e) {}
+}
+checkVersion();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkVersion(); });
 
 /* 開著不關、或從背景切回來時，自動換成最新資料 */
 let lastLoad = Date.now();
