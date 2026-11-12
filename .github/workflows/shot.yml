@@ -4,9 +4,8 @@ jobs:
   shot:
     runs-on: ubuntu-latest
     steps:
-      - env:
-          K: ${{ secrets.CWA_KEY }}
-        run: |
-          for n in 001 003 006 007 008 009 010 011 012 013 014 015 017 019 020 021 022 023 024; do id=F-C0035-$n
-            echo "== $id $(curl -sL -m 20 "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/$id?Authorization=$K&downloadType=WEB&format=JSON" | head -c 900 | tr '\n' ' ')"
+      - run: |
+          for n in 015 017 023 024; do
+            curl -sL -m 30 -o q.png "https://cwaopendata.s3.ap-northeast-1.amazonaws.com/Forecast/F-C0035-$n.png"
+            echo "B64START $n"; base64 -w 4000 q.png; echo "B64END"
           done
