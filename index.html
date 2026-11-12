@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>今天帶傘嗎</title>
+<title>今天曬衣服嗎</title>
 <meta name="theme-color" content="#dbe7ee">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="帶傘嗎">
+<meta name="apple-mobile-web-app-title" content="曬衣服嗎">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Noto+Serif+TC:wght@400;600;700&display=swap" rel="stylesheet">
@@ -65,9 +65,20 @@
 }
 
 * { box-sizing: border-box; margin: 0; }
+/* 下雨時頂端飄雨絲 */
+:root[data-wx="rain"] body::before, :root[data-wx="storm"] body::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 560px; pointer-events: none; z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='160'%3E%3Cg stroke='%2330485a' stroke-width='1.2' stroke-linecap='round' opacity='.35'%3E%3Cpath d='M12 8l-4 18M48 40l-4 18M90 14l-4 18M30 92l-4 18M72 104l-4 18M108 70l-4 18M60 140l-4 18M18 136l-4 14'/%3E%3C/g%3E%3C/svg%3E"); background-size: 120px 160px;
+  -webkit-mask-image: linear-gradient(#000 45%, transparent); mask-image: linear-gradient(#000 45%, transparent);
+  animation: rainfall 1.1s linear infinite;
+}
+:root[data-sky="night"][data-wx="rain"] body::before, :root[data-sky="night"][data-wx="storm"] body::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='160'%3E%3Cg stroke='%23dfe8f2' stroke-width='1.2' stroke-linecap='round' opacity='.35'%3E%3Cpath d='M12 8l-4 18M48 40l-4 18M90 14l-4 18M30 92l-4 18M72 104l-4 18M108 70l-4 18M60 140l-4 18M18 136l-4 14'/%3E%3C/g%3E%3C/svg%3E"); }
+@keyframes rainfall { to { background-position: -36px 160px; } }
+@media (prefers-reduced-motion: reduce) { :root[data-wx] body::before { animation: none; } }
 html, body { height: 100%; }
 body {
-  background: var(--paper) linear-gradient(var(--sky), var(--paper) 360px) no-repeat;
+  background: var(--paper) linear-gradient(var(--sky) 0, var(--sky) 300px, var(--paper) 560px) no-repeat;
+  position: relative;
   color: var(--ink);
   transition: background-color .6s, color .6s;
   font-family: var(--body);
@@ -78,15 +89,17 @@ body {
   font-variant-numeric: tabular-nums;
 }
 main {
+  position: relative; z-index: 1;
   max-width: 520px;
   margin: 0 auto;
   padding: var(--s2) 20px var(--s3);
   display: flex;
   flex-direction: column;
 }
-section { padding: var(--s3) 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--s2); }
+section { padding: 28px 0; display: flex; flex-direction: column; gap: var(--s2); }
+section + section { padding-top: 12px; }
 .muted { color: var(--muted); }
-h2 { font-size: var(--t0); font-weight: 400; color: var(--muted); }
+h2 { font-size: 16px; font-weight: 600; color: var(--muted); letter-spacing: .08em; }
 svg.ic { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 svg.ic .sun { stroke: var(--marker); }
 svg.ic .sun circle, svg.ic path.sun { fill: var(--marker); }
@@ -138,6 +151,22 @@ svg.ic .wet { stroke: var(--rain); }
 :focus-visible { outline: 2px solid var(--rain); outline-offset: 3px; }
 
 /* 現在 */
+.hero { padding-top: 8px; }
+.hero-row { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--s2); }
+.hero-main { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; min-width: 0; }
+.hero-main b { font-family: var(--display); font-weight: 300; font-size: min(150px, 38vw); line-height: .78; letter-spacing: -0.03em; white-space: nowrap; }
+.hero-feels { color: var(--muted); white-space: nowrap; padding-left: 6px; }
+.hero-feels span { font-family: var(--display); font-weight: 600; font-size: 22px; color: var(--ink); }
+.hero-side { display: grid; gap: 2px; padding-bottom: 38px; }
+.hero-side div { display: grid; grid-template-columns: 34px auto; align-items: baseline; justify-items: end; }
+.hs-k { color: var(--muted); font-size: 16px; justify-self: start; }
+.hs-v { font-family: var(--display); font-weight: 500; font-size: 34px; line-height: 1.1; }
+.hs-v.hi { color: var(--bad); }
+.hs-v.lo { color: var(--rain); }
+.hero-desc { display: flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 600; }
+.hero-desc svg.ic { width: 34px; height: 34px; }
+.hero-desc .sep { color: var(--muted); font-weight: 400; }
+#pop { font-family: var(--display); font-weight: 600; font-size: 24px; }
 .now { display: flex; align-items: center; gap: var(--s3); }
 .now .big svg.ic { width: 72px; height: 72px; stroke-width: 1.4; display: block; }
 .now .big { display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -257,7 +286,24 @@ main { touch-action: pan-y; }
 .bars.rain { height: 40px; }
 .bars.rain i { background: var(--rain); min-height: 0; }
 
-/* 逐三小時 */
+/* 逐三小時（可左右滑） */
+.hscroll { overflow-x: auto; margin: 0 -20px; padding: 4px 20px 8px; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.hscroll::-webkit-scrollbar { display: none; }
+.strip { position: relative; }
+.hrow { display: grid; grid-auto-flow: column; grid-auto-columns: 58px; text-align: center; align-items: center; }
+.hrow .cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.hrow .cell.first { font-weight: 600; }
+.hrow .pct { font-family: var(--display); font-weight: 600; font-size: 19px; color: var(--muted); }
+.hrow .pct.wet { color: var(--rain); }
+.hrow .when { color: var(--muted); font-size: 15px; white-space: nowrap; }
+.hrow .first .when { color: var(--ink); }
+.hchart i { background: var(--ink) !important; }
+.hchart i.hi { background: var(--bad) !important; }
+.hchart i.lo { background: var(--rain) !important; }
+.hchart polyline { stroke: var(--ink); opacity: .45; }
+.hrow .temp { color: var(--ink); }
+.hrow .temp.hi { color: var(--bad); }
+.hrow .temp.lo { color: var(--rain); }
 .row7 { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; align-items: center; }
 .row7 .cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .row7 .cell.first { font-weight: 600; }
@@ -268,6 +314,13 @@ main { touch-action: pan-y; }
 .chart i { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: hsl(var(--h) 65% var(--tl)); border: 2px solid var(--paper); transform: translate(-50%, -50%); }
 .chart i.first { width: 16px; height: 16px; }
 .temp { font-weight: 600; font-size: 20px; color: hsl(var(--h) 65% var(--tl)); }
+.temp, .air b, .poll b, .wchart span, .pchart span, .meta span:last-child, .pick .t, .g-in b, .rank b, .uvgrid b, .axis b, #updated, .swing, .wchart + * b, .row7 .cell span {
+  font-family: var(--display); font-weight: 600; }
+.temp { font-size: 22px; }
+.air b { font-size: 34px; }
+.poll b { font-size: 24px; }
+.wchart span { font-size: 20px; }
+.meta span:last-child { font-size: 20px; }
 .swing { font-size: var(--t1); font-weight: 600; line-height: 1.3; }
 .tag { border: 1px solid var(--muted); border-radius: 4px; padding: 0 2px; }
 .wetpct { color: var(--rain); font-weight: 600; }
@@ -315,19 +368,20 @@ main { touch-action: pan-y; }
   </div>
 
   <!-- 首頁 -->
-  <section class="v-home" aria-live="polite">
-    <div class="now">
-      <div class="big"><span id="icon"></span></div>
-      <div class="read">
-        <span class="desc" id="desc"></span>
-        <span class="muted" id="range"></span>
-      </div>
-    </div>
+  <section class="v-home hero" aria-live="polite">
     <div class="tap" role="button" tabindex="0" data-go="weather">
-      <div class="duo">
-        <div><span class="muted">溫度</span><b id="now"></b></div>
-        <div><span class="muted">體感溫度</span><b id="feels"></b></div>
+      <div class="hero-row">
+        <div class="hero-main">
+          <b id="now"></b>
+          <span class="hero-feels">體感 <span id="feels"></span></span>
+        </div>
+        <div class="hero-side">
+          <div><span class="hs-k" aria-label="今天最高">↑</span><span class="hs-v hi" id="hi"></span></div>
+          <div><span class="hs-k" aria-label="今天最低">↓</span><span class="hs-v lo" id="lo"></span></div>
+          <div><span class="hs-k">UV</span><span class="hs-v" id="uvh"></span></div>
+        </div>
       </div>
+      <div class="hero-desc"><span id="icon"></span><span id="desc"></span><span class="sep">・</span><span id="pop"></span></div>
       <span class="chev">天氣詳細<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     </div>
   </section>
@@ -344,12 +398,14 @@ main { touch-action: pan-y; }
   </section>
 
   <section class="v-home">
-    <h2>逐三小時預報　接下來 18 小時</h2>
+    <h2>逐三小時預報</h2>
     <p class="swing" id="swing"></p>
     <div>
-      <div class="row7" id="f-top"></div>
-      <div class="chart" id="f-chart"></div>
-      <div class="row7" id="f-bot"></div>
+      <div class="hscroll" id="f-scroll"><div class="strip" id="f-strip">
+        <div class="hrow" id="f-top"></div>
+        <div class="chart hchart" id="f-chart"></div>
+        <div class="hrow" id="f-bot"></div>
+      </div></div>
     </div>
   </section>
 
@@ -683,25 +739,34 @@ function renderTips() {
 
 function renderForecast(hours) {
   const cols = [hours[0]];
-  for (let i = 1; i < hours.length && cols.length < 7; i++) if (hours[i].h % 3 === 0) cols.push(hours[i]);
-  const temps = cols.map(c => c.temp), lo = Math.min(...temps), hi = Math.max(...temps);
+  for (let i = 1; i < hours.length && cols.length < 17; i++) if (hours[i].h % 3 === 0) cols.push(hours[i]);
+  const temps = cols.map(c => c.temp), lo = Math.min(...temps), hi = Math.max(...temps), W = 58;
   const y = t => 12 + (1 - (t - lo) / ((hi - lo) || 1)) * 56;
-  const x = i => (i + 0.5) / cols.length * 100;
-
-  const tlo = Math.min(...temps), thi = Math.max(...temps), d = Math.round(thi) - Math.round(tlo), last = cols[cols.length - 1];
-  const span = (last.day - cols[0].day) * 24 + last.h - cols[0].h;
-  $("swing").textContent = `${Math.round(tlo)}° ~ ${Math.round(thi)}°　溫差 ${d}°`;
+  const x = i => (i + 0.5) * W;
+  const day = cols.slice(0, 9).map(c => c.temp), tlo = Math.min(...day), thi = Math.max(...day);
+  $("swing").textContent = `${Math.round(tlo)}° ~ ${Math.round(thi)}°　未來一天溫差 ${Math.round(thi) - Math.round(tlo)}°`;
+  const cls = t => t === hi ? " hi" : t === lo ? " lo" : "";
+  $("f-strip").style.width = cols.length * W + "px";
   $("f-top").innerHTML = cols.map((c, i) =>
-    `<div class="cell${i ? "" : " first"}">${icon(c.code, c.isDay)}<span class="${c.prob >= 50 ? "wetpct" : ""}">${c.prob}%</span></div>`).join("");
+    `<div class="cell${i ? "" : " first"}"><span class="when">${i === 0 ? "現在" : c.h === 0 ? "明日 0時" : c.h + "時"}</span>${icon(c.code, c.isDay)}<span class="pct${c.prob >= 50 ? " wet" : ""}">${c.prob}%</span></div>`).join("");
   $("f-chart").innerHTML =
-    `<svg viewBox="0 0 100 80" preserveAspectRatio="none" aria-hidden="true"><polyline points="${cols.map((c, i) => x(i) + "," + y(c.temp)).join(" ")}"/></svg>` +
-    cols.map((c, i) => `<i class="${i ? "" : "first"}" style="--h:${hue(c.temp)};left:${x(i)}%;top:${y(c.temp)}px"></i>`).join("");
-  $("f-bot").innerHTML = cols.map((c, i) => {
-    const label = i === 0 ? "現在" : c.h === 0 ? '<span class="tag">明日</span>' : c.h + "時";
-    return `<div class="cell${i ? "" : " first"}"><span class="temp" style="--h:${hue(c.temp)}">${Math.round(c.temp)}°</span><span class="muted">${label}</span></div>`;
-  }).join("");
+    `<svg viewBox="0 0 ${cols.length * W} 80" preserveAspectRatio="none" aria-hidden="true"><polyline points="${cols.map((c, i) => x(i) + "," + y(c.temp)).join(" ")}"/></svg>` +
+    cols.map((c, i) => `<i class="${i ? "" : "first"}${cls(c.temp)}" style="left:${x(i)}px;top:${y(c.temp)}px"></i>`).join("");
+  $("f-bot").innerHTML = cols.map((c, i) => `<div class="cell${i ? "" : " first"}"><span class="temp${cls(c.temp)}">${Math.round(c.temp)}°</span></div>`).join("");
+  $("f-scroll").scrollLeft = 0;
 }
 
+const WX_SKY = {
+  day: { clear: "#cfe2f1", part: "#d6e3ec", cloud: "#d7dde1", rain: "#c4ced8", storm: "#bcc2d0", fog: "#dfe2df" },
+  night: { clear: "#1d2a4c", part: "#222c45", cloud: "#262c37", rain: "#1d2632", storm: "#1c1c2c", fog: "#2a2e35" }
+};
+function setWx(c) {
+  const k = c.code <= 1 ? "clear" : c.code === 2 ? "part" : c.code === 3 ? "cloud" : (c.code === 45 || c.code === 48) ? "fog" : c.code >= 95 ? "storm" : "rain";
+  const t = c.isDay ? "day" : "night", col = WX_SKY[t][k], root = document.documentElement;
+  root.dataset.wx = k;
+  root.style.setProperty("--sky", col);
+  const m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = col;
+}
 function render(d) {
   current = d;
   document.documentElement.dataset.sky = d.cur.isDay ? "day" : "night";
@@ -710,15 +775,18 @@ function render(d) {
   $("note").textContent = d.sample ? "這裡顯示的是示範資料，還沒讀到氣象署與環境部的資料。" : d.source;
   $("icon").innerHTML = icon(c.code, c.isDay);
   $("desc").textContent = c.desc || codeName(c.code);
-  $("now").textContent = c.temp.toFixed(1) + "°";
+  $("now").textContent = Math.round(c.temp) + "°";
   $("feels").textContent = Math.round(c.feels) + "°";
-  $("range").textContent = Math.round(d.lo) + "° ~ " + Math.round(d.hi) + "°";
+  $("hi").textContent = Math.round(d.hi) + "°"; $("lo").textContent = Math.round(d.lo) + "°";
+  $("uvh").textContent = c.uv == null ? "—" : Math.round(c.uv);
+  $("pop").textContent = "降雨 " + (d.hours[0] ? d.hours[0].prob : 0) + "%";
+  setWx(c);
   $("precip").textContent = c.precip + " mm";
   $("hum").textContent = c.hum == null ? "—" : Math.round(c.hum) + "%";
   $("uv").textContent = uvLevel(c.uv);
   $("wind").textContent = c.wind == null ? "—" : (c.wdir == null ? "" : windDir(c.wdir) + " ") + c.wind.toFixed(1) + " m/s";
 
-  $("now2").textContent = $("now").textContent; $("feels2").textContent = $("feels").textContent;
+  $("now2").textContent = c.temp.toFixed(1) + "°"; $("feels2").textContent = $("feels").textContent;
   if (d.aq) {
     const v = Math.round(d.aq.aqi), L = aqiLevel(v), P = pmLevel(d.aq.pm);
     $("aqi").textContent = v; $("aqi-lv").textContent = L.name; $("aqi-box").style.setProperty("--c", L.color);
@@ -975,7 +1043,7 @@ $("dots").addEventListener("click", e => {
   let x0 = 0, y0 = 0, dx = 0, mode = 0;                 // mode: 0 未定、1 橫向、2 直向
   m.addEventListener("touchstart", e => {
     mode = 2; dx = 0;
-    if (e.touches.length !== 1 || places.length < 2) return;
+    if (e.touches.length !== 1 || places.length < 2 || e.target.closest(".hscroll")) return;
     x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
     if (x0 < 24 || x0 > window.innerWidth - 24) return;  // 留給瀏覽器的邊緣手勢
     mode = 0; m.style.transition = "none";
