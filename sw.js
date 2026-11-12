@@ -1,6 +1,30 @@
-// 只負責顯示推播通知，不快取任何檔案（網頁更新照常即時生效）
+// 推播通知＋離線備份：有網路時一律抓最新的（並順手存一份），沒網路時才拿上次存的
+const CACHE = "sai-offline-v1";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
+
+self.addEventListener("fetch", e => {
+  const req = e.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  if (/\/data\/(radar\/|raw-|tmp-)/.test(url.pathname)) return;
+  const scope = new URL("./", self.registration.scope).href;
+  const key = req.mode === "navigate" ? scope : url.origin + url.pathname;
+  e.respondWith((async () => {
+    try {
+      const r = await fetch(req);
+      if (r.ok && r.type === "basic") { const c = await caches.open(CACHE); c.put(key, r.clone()); }
+      return r;
+    } catch (err) {
+      const c = await caches.open(CACHE);
+      const hit = await c.match(key) || (req.mode === "navigate" ? await c.match(scope) : null);
+      if (hit) return hit;
+      throw err;
+    }
+  })());
+});
+
 self.addEventListener("push", e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (x) { d = { body: e.data ? e.data.text() : "" }; }

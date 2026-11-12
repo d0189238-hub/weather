@@ -28,6 +28,7 @@ const scrub = s => { let t = String(s).split(CWA || "\u0000").join("***").split(
 const fail = (where, e) => { status.errors.push(where + ": " + scrub(e && e.message || e).slice(0, 300)); };
 
 // 不分大小寫取欄位，氣象署改過幾次欄位大小寫
+const lvl = v => { const m = String(v || "").match(/(\d)\s*級?\s*(弱|強)?/); return m ? Number(m[1]) + (m[2] === "強" ? .5 : 0) : 0; };
 const ci = (o, ...names) => {
   if (!o || typeof o !== "object") return undefined;
   const keys = Object.keys(o);
@@ -340,6 +341,72 @@ async function main() {
     } catch (e) { fail("警特報", e); }
   }
   await writeFile(OUT + "/warn.json", JSON.stringify({ time: new Date().toISOString(), warn }));
+
+  // ---------- 地震報告（顯著有感＋小區域，最近 10 筆）----------
+  const shape = (o, depth = 0) => {
+    if (depth > 5) return "…";
+    if (Array.isArray(o)) return o.length ? [shape(o[0], depth + 1), "×" + o.length] : [];
+    if (o && typeof o === "object") { const r = {}; for (const k of Object.keys(o).slice(0, 25)) r[k] = shape(o[k], depth + 1); return r; }
+    return typeof o === "string" ? o.slice(0, 40) : o;
+  };
+  const quakes = [];
+  if (CWA) for (const id of ["E-A0015-001", "E-A0016-001"]) {
+    try {
+      const j = await getJSON(cwaUrl(id));
+      const list = arr(ci(ci(j, "records"), "Earthquake"));
+      if (!status.seen.quakeShape && list[0]) status.seen.quakeShape = shape(list[0]);
+      for (const q of list.slice(0, 8)) {
+        const info = ci(q, "EarthquakeInfo") || {}, ep = ci(info, "Epicenter") || {}, mg = ci(info, "EarthquakeMagnitude") || {};
+        const counties = {}, stations = [];
+        for (const a of arr(ci(ci(q, "Intensity"), "ShakingArea"))) {
+          const cn = ci(a, "CountyName"), ai = ci(a, "AreaIntensity");
+          if (cn && ai) for (const c of String(cn).split(/[、,，\s]+/).filter(Boolean)) if (!counties[c] || lvl(ai) > lvl(counties[c])) counties[c] = String(ai);
+          for (const s of arr(ci(a, "EqStation"))) {
+            const si = ci(s, "SeismicIntensity"), la = num(ci(s, "StationLatitude")), lo = num(ci(s, "StationLongitude"));
+            if (si && la !== null && lo !== null) stations.push([ci(s, "StationName") || "", la, lo, String(si)]);
+          }
+        }
+        quakes.push({
+          no: ci(q, "EarthquakeNo"), src: id, time: ci(info, "OriginTime"), depth: num(ci(info, "FocalDepth")),
+          loc: ci(ep, "Location"), lat: num(ci(ep, "EpicenterLatitude")), lon: num(ci(ep, "EpicenterLongitude")),
+          mag: num(ci(mg, "MagnitudeValue")), img: ci(q, "ReportImageURI") || null, web: ci(q, "Web") || null,
+          text: ci(q, "ReportContent") || "", counties, stations
+        });
+      }
+      status.seen[id] = list.length;
+    } catch (e) { fail("地震 " + id, e); }
+  }
+  quakes.sort((a, b) => Date.parse(String(b.time).replace(" ", "T") + "+08:00") - Date.parse(String(a.time).replace(" ", "T") + "+08:00"));
+  await writeFile(OUT + "/quake.json", JSON.stringify({ list: quakes.slice(0, 10) }));
+
+  // ---------- 颱風路徑（有颱風時才有資料）----------
+  const typhoons = [];
+  if (CWA) {
+    try {
+      const j = await getJSON(cwaUrl("W-C0034-005"));
+      status.seen.typhoonShape = shape(ci(j, "records"));
+      const coord = v => { const m = String(v || "").match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/); if (!m) return null; let a = Number(m[1]), b = Number(m[2]); return a < b ? { lat: a, lon: b } : { lon: a, lat: b }; };
+      const radius = o => { if (o == null) return null; if (typeof o !== "object") return num(o); return num(ci(o, "radius")) ?? null; };
+      const fixOf = (f, base) => {
+        const c = coord(ci(f, "coordinate")); if (!c) return null;
+        let t = ci(f, "fixTime", "forecastTime", "initTime");
+        const tau = num(ci(f, "tau"));
+        if (!t && base && tau !== null) t = new Date(Date.parse(base) + tau * 3600e3).toISOString();
+        return { t, lat: c.lat, lon: c.lon, wind: num(ci(f, "maxWindSpeed")), gust: num(ci(f, "maxGustSpeed")), p: num(ci(f, "pressure")),
+          spd: num(ci(f, "movingSpeed")), dir: ci(f, "movingDirection") || null,
+          r7: radius(ci(f, "circleOf15Ms")), r10: radius(ci(f, "circleOf25Ms")), prob: num(ci(f, "radiusOf70PercentProbability")) };
+      };
+      const tcs = arr(ci(ci(ci(j, "records"), "tropicalCyclones"), "tropicalCyclone"));
+      for (const tc of tcs) {
+        const past = arr(ci(ci(tc, "analysisData"), "fix")).map(f => fixOf(f)).filter(Boolean);
+        const base = past.length ? past[past.length - 1].t : null;
+        const fc = arr(ci(ci(tc, "forecastData"), "fix")).map(f => fixOf(f, base)).filter(Boolean);
+        if (past.length || fc.length) typhoons.push({ name: ci(tc, "cwaTyphoonName") || ci(tc, "typhoonName") || "熱帶性低氣壓", en: ci(tc, "typhoonName") || "", no: ci(tc, "cwaTdNo", "cwaTyNo") || null, past, fc });
+      }
+      status.seen.typhoons = typhoons.length;
+    } catch (e) { fail("颱風", e); }
+  }
+  await writeFile(OUT + "/typhoon.json", JSON.stringify({ list: typhoons }));
 
   // ---------- 雷達動畫：每次存一張縮小的雷達圖，保留最近 2 小時 ----------
   const libs = {};

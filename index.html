@@ -165,6 +165,8 @@ svg.ic .wet { stroke: var(--rain); }
 /* 現在 */
 .hero { padding-top: 8px; }
 .laundry { padding-top: 4px; }
+.offl { margin: 0 0 8px; padding: 10px 14px; border-radius: 8px; background: var(--cloth); font-size: 16px; }
+.offl[hidden] { display: none; }
 .ld { display: grid; grid-template-columns: 56px 1fr; gap: 14px; align-items: start; }
 .ld-ic svg.gi { width: 56px; height: 56px; }
 .ld-t { display: flex; flex-direction: column; gap: 2px; }
@@ -405,6 +407,7 @@ main { touch-action: pan-y; }
     <span id="updated"></span>
   </div>
   <div class="dots" id="dots" role="tablist" aria-label="我的地點" hidden></div>
+  <p class="offl" id="offline" role="status" hidden>目前沒有網路，下面是上次存下的資料，時間以頁首的更新時間為準。</p>
   <div class="warn v-home" id="warn" role="alert" hidden></div>
   <div class="top v-sub">
     <button type="button" class="btn ghost" id="back">‹ 返回</button>
@@ -1645,6 +1648,12 @@ async function checkVersion() {
   } catch (e) {}
 }
 checkVersion();
+/* 離線備份：每個人都裝上 service worker，沒網路時顯示上次的資料 */
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+const setOffline = () => { $("offline").hidden = navigator.onLine !== false; };
+addEventListener("online", () => { setOffline(); refresh && (lastLoad = 0, refresh()); });
+addEventListener("offline", setOffline);
+setOffline();
 document.addEventListener("visibilitychange", () => { if (!document.hidden) checkVersion(); });
 
 /* 開著不關、或從背景切回來時，自動換成最新資料 */
