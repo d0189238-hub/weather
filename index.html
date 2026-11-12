@@ -307,6 +307,14 @@ main { touch-action: pan-y; }
 .lmap .rgov { image-rendering: pixelated; image-rendering: crisp-edges; }
 .lme { position: absolute; top: 10px; right: 10px; z-index: 1000; font: inherit; font-size: 15px; padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(0,0,0,.25); background: rgba(255,255,255,.92); color: #1c2a33; cursor: pointer; }
 .leaflet-container { font: inherit; }
+.lmap.plain { background: #eef0ec; }
+.lmap.plain .bline { filter: grayscale(1) brightness(.55); }
+.lmap:not(.plain) .bline { filter: grayscale(1) brightness(4); }
+.mlab { background: none; border: 0; }
+.mlab span { display: block; transform: translate(-50%, -50%); white-space: nowrap; font-weight: 700; color: #fff; text-shadow: 0 0 3px rgba(0,0,0,.85), 0 0 1px #000; pointer-events: none; }
+.mlab.county span { font-size: 15px; letter-spacing: .1em; }
+.mlab.town span { font-size: 13px; }
+.lmap.plain .mlab span { color: #2b3a44; text-shadow: 0 0 3px #fff, 0 0 2px #fff; }
 .leaflet-control-attribution { font-size: 11px; }
 .player { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; }
 .player .btn { padding: 6px 12px; white-space: nowrap; }
@@ -614,7 +622,7 @@ main { touch-action: pan-y; }
     <div id="ty-body"></div>
   </section>
   <section class="v-obs" id="o-radar" hidden>
-    <div class="sat-h"><h2>雷達回波・閃電</h2><span class="sat-t" id="base-tabs" hidden><button type="button" class="on" data-b="photo">衛星</button><button type="button" data-b="map">地圖</button></span></div>
+    <div class="sat-h"><h2>雷達回波・閃電</h2><span class="sat-t" id="base-tabs" hidden><button type="button" class="on" data-b="photo">衛星</button><button type="button" data-b="map">簡潔</button></span></div>
     <div class="lmap" id="rmap" hidden><button type="button" class="lme" id="rmap-me">◎ 我的位置</button></div>
     <a class="map" id="radar-link" target="_blank" rel="noopener"><img id="radar-img" alt="雷達整合回波圖，疊上過去一小時的閃電位置"><svg id="radar-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true"></svg></a>
     <div class="player" id="r-player" hidden>
@@ -1777,14 +1785,20 @@ async function ensureMap() {
   $("rmap").hidden = false; $("radar-link").hidden = true; $("base-tabs").hidden = false;
   const nl = l => `https://wmts.nlsc.gov.tw/wmts/${l}/default/GoogleMapsCompatible/{z}/{y}/{x}`;
   const attr = '圖資 <a href="https://maps.nlsc.gov.tw/" target="_blank" rel="noopener">內政部國土測繪中心</a>｜雷達 中央氣象署';
-  LBASE.photo = L.layerGroup([L.tileLayer(nl("PHOTO_MIX"), { maxZoom: 18, attribution: attr }), L.tileLayer(nl("CITY"), { maxZoom: 18, opacity: .9 })]);
-  LBASE.map = L.layerGroup([L.tileLayer(nl("EMAP"), { maxZoom: 18, attribution: attr })]);
+  // 只用純空拍照片＋縣市、鄉鎮界線，不放道路與編號；地名由我們自己標
+  const lines = () => [L.tileLayer(nl("CITY"), { maxZoom: 18, opacity: .95, className: "bline" }), L.tileLayer(nl("TOWN"), { maxZoom: 18, minZoom: 9, opacity: .6, className: "bline" })];
+  LBASE.photo = L.layerGroup([L.tileLayer(nl("PHOTO2"), { maxZoom: 18, attribution: attr }), ...lines()]);
+  LBASE.map = L.layerGroup([L.tileLayer("data:image/gif;base64,R0lGODlhAQABAAAAACw=", { maxZoom: 18, attribution: attr }), ...lines()]);
+  $("rmap").classList.toggle("plain", baseKind === "map");
   const h = here || { lat: 23.7, lon: 120.95 };
   LMAP = L.map("rmap", { minZoom: 6, maxZoom: 18, zoomSnap: 0.5, attributionControl: true }).setView([h.lat, h.lon], 9);
   LBASE[baseKind].addTo(LMAP);
   L.DomEvent.disableClickPropagation($("rmap-me"));
   LOV = L.imageOverlay("data/" + RG.frames[RG.frames.length - 1].file, RG.bounds, { opacity: 0.72, className: "rgov", interactive: false }).addTo(LMAP);
   LMARK = L.layerGroup().addTo(LMAP);
+  LLAB = L.layerGroup().addTo(LMAP);
+  LMAP.on("zoomend moveend", drawLabels);
+  fetch("data/towncoords.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).then(j => { TC = j; drawLabels(); }).catch(() => {});
   rgMode = true;
   drawMapMarks();
   setFrames(RG.frames);
@@ -1801,9 +1815,22 @@ function drawMapMarks() {
     L.circleMarker([here.lat, here.lon], { radius: 4, color: "#111", weight: 2, fillColor: "#fff", fillOpacity: 1, interactive: false }).addTo(LMARK);
   }
 }
+/* 地名：縮小時只標縣市，放大才標鄉鎮，只畫畫面內的 */
+let LLAB = null, TC = null;
+function drawLabels() {
+  if (!LMAP || !LLAB || !TC) return;
+  LLAB.clearLayers();
+  const z = LMAP.getZoom(), b = LMAP.getBounds().pad(0.1);
+  const add = (lat, lon, text, cls) => { if (b.contains([lat, lon])) L.marker([lat, lon], { interactive: false, keyboard: false, icon: L.divIcon({ className: "mlab " + cls, html: `<span>${text}</span>`, iconSize: null }) }).addTo(LLAB); };
+  if (z < 9.5) {
+    for (const c in TC) { const pts = Object.values(TC[c]); if (!pts.length) continue;
+      const la = pts.reduce((a, p) => a + p[0], 0) / pts.length, lo = pts.reduce((a, p) => a + p[1], 0) / pts.length; add(la, lo, c, "county"); }
+  } else for (const c in TC) for (const t in TC[c]) add(TC[c][t][0], TC[c][t][1], t, "town");
+}
 $("base-tabs").addEventListener("click", e => {
   const b = e.target.closest("[data-b]"); if (!b || !LMAP) return;
   LMAP.removeLayer(LBASE[baseKind]); baseKind = b.dataset.b; LBASE[baseKind].addTo(LMAP);
+  $("rmap").classList.toggle("plain", baseKind === "map");
   if (LOV) LOV.bringToFront();
   $("base-tabs").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
 });

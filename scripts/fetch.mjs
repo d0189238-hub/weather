@@ -314,6 +314,10 @@ async function main() {
 
 
   await writeFile(OUT + "/hist.json", JSON.stringify(hist));
+  // 鄉鎮名稱位置（地圖標籤用）
+  const tc = {};
+  for (const k in townData) { const T = townData[k]; if (T && T.lat != null && T.lon != null) { const [c, t] = k.split("|"); (tc[c] = tc[c] || {})[t] = [Math.round(T.lat * 1000) / 1000, Math.round(T.lon * 1000) / 1000]; } }
+  await writeFile(OUT + "/towncoords.json", JSON.stringify(tc));
 
   // 天氣警特報（各縣市）
   const warn = {};
