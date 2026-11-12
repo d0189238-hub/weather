@@ -2255,7 +2255,7 @@ function drawSmall() {
   const P = ([x, y]) => [(x - lo0) * sx, (la1 - y) * sy];
   const path = (ctx, g) => { const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates; ctx.beginPath(); for (const poly of polys) for (const ring of poly) ring.forEach((p, i) => { const [x, y] = P(p); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); };
   const dark = document.documentElement.dataset.sky === "night";
-  box.innerHTML = idx.map((i, n) => `<figure class="smf"${Q ? ` data-img="data/${Q.periods[i].img}"` : ""}><figcaption${Q ? ' class="rng"' : ""}>${Q ? twH(Date.parse(Q.periods[i].from)) + " → " + twH(Date.parse(Q.periods[i].to)).replace(/^(今|明|後)天(早上|晚上)?\s?/, (m, a, b) => m) : fcLabel(i)}</figcaption><canvas width="${cw * dpr}" height="${ch * dpr}" style="width:${cw}px;height:${ch}px"></canvas><div class="sm-isl" data-n="${n}"></div></figure>`).join("");
+  box.innerHTML = idx.map((i, n) => `<figure class="smf"${Q ? ` data-img="data/${Q.periods[i].img}"` : ""}><figcaption${Q ? ' class="rng"' : ""}>${Q ? twH(Date.parse(Q.periods[i].from)).replace(/ \d+ 點$/, "") + " → " + twH(Date.parse(Q.periods[i].to)).replace(/ \d+ 點$/, "") : fcLabel(i)}</figcaption><canvas width="${cw * dpr}" height="${ch * dpr}" style="width:${cw}px;height:${ch}px"></canvas><div class="sm-isl" data-n="${n}"></div></figure>`).join("");
   const pl0 = places[active] ? pname(places[active]).replace(/^(.{2,3}[縣市])/, "") : "你這裡";
   box.querySelectorAll("canvas").forEach((cv, n) => {
     const ctx = cv.getContext("2d"), i = idx[n];
