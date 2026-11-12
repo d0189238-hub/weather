@@ -310,6 +310,11 @@ main { touch-action: pan-y; }
 .chips[hidden] { display: none; }
 .chips button { font: inherit; font-size: 15px; min-height: 34px; padding: 4px 12px; border-radius: 17px; border: 1px solid var(--line); background: none; color: var(--muted); cursor: pointer; }
 .chips button.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.fcctl { display: flex; flex-direction: column; gap: 8px; }
+.fcctl[hidden] { display: none; }
+.fc-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fc-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 15px; color: var(--muted); }
+.fc-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 5px; vertical-align: -2px; }
 .eqbar { display: flex; align-items: center; gap: 10px; width: 100%; font: inherit; font-size: 16px; text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
 .eqbar[hidden] { display: none; }
 .eqbar .tag { flex: none; font-size: 13px; font-weight: 700; color: #fff; background: #e0412b; border-radius: 10px; padding: 2px 8px; }
@@ -639,9 +644,15 @@ main { touch-action: pan-y; }
   <section class="v-obs" id="o-radar" hidden>
     <div class="sat-h"><h2>即時地圖</h2><span class="sat-t" id="base-tabs" hidden><button type="button" class="on" data-b="photo">衛星</button><button type="button" data-b="map">簡潔</button></span></div>
     <div class="chips" id="layer-chips" hidden role="group" aria-label="地圖圖層">
-      <button type="button" data-l="rain" aria-pressed="true">雨區</button><button type="button" data-l="light" aria-pressed="true">閃電</button><button type="button" data-l="eq" aria-pressed="true">地震</button><button type="button" data-l="fault" aria-pressed="false">斷層</button>
+      <button type="button" data-l="rain" aria-pressed="true">雨區</button><button type="button" data-l="fc" aria-pressed="false">預報</button><button type="button" data-l="light" aria-pressed="true">閃電</button><button type="button" data-l="eq" aria-pressed="true">地震</button><button type="button" data-l="fault" aria-pressed="false">斷層</button>
     </div>
     <div class="lmap" id="rmap" hidden><button type="button" class="lme" id="rmap-me">◎ 我的位置</button></div>
+    <div class="fcctl" id="fc-ctl" hidden>
+      <div class="fc-row"><span class="sat-t" id="fc-kind"><button type="button" class="on" data-k="wx">天氣</button><button type="button" data-k="pop">降雨機率</button></span><span class="ptime" id="fc-time"></span></div>
+      <div class="player"><button type="button" class="btn ghost" id="fc-play">▶ 播放</button><input type="range" id="fc-slider" min="0" max="15" step="1" value="0" aria-label="選擇預報時間"><span></span></div>
+      <div class="fc-legend" id="fc-legend"></div>
+      <p class="cap">每個鄉鎮依照氣象署鄉鎮預報塗色，每 3 小時一格、共 48 小時；點鄉鎮可以看那個時段的預報。</p>
+    </div>
     <button type="button" class="eqbar" id="eq-bar" hidden></button>
     <p class="cap" id="fault-note" hidden>紅線是經濟部公布的 36 條活動斷層（1/25,000 版），位置僅供參考，放大後不代表精確位置，不能用來判斷某棟建築是否在斷層上。</p>
     <a class="map" id="radar-link" target="_blank" rel="noopener"><img id="radar-img" alt="雷達整合回波圖，疊上過去一小時的閃電位置"><svg id="radar-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true"></svg></a>
@@ -1227,6 +1238,7 @@ function fromData(T, D) {
 /* ---------- 地點 ---------- */
 const pname = p => p.c + p.t;
 const seedOf = s => [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7);
+let FC = null, FCGEO = null, fcKind = "wx", fcIdx = 0, fcTimer = null;
 let LLAB = null, TC = null, LMEL = null, LEQ = null, LFAULT = null, eqMarks = {};
 let LMAP = null, LOV = null, LBASE = {}, LMARK = null, RG = null, rgMode = false, baseKind = "photo";
 let TY = null, EQ = null, WARN = null, OB = null, satKind = null, rankKind = "hi", here = null;
@@ -1881,7 +1893,7 @@ function drawLabels() {
   } else for (const c in TC) for (const t in TC[c]) add(TC[c][t][0], TC[c][t][1], t, "town");
 }
 /* ---------- 地圖圖層：雨區、閃電、地震、斷層 ---------- */
-const LAYERS_ON = (() => { try { return Object.assign({ rain: true, light: true, eq: true, fault: false }, JSON.parse(store.get("mapLayers") || "{}")); } catch (e) { return { rain: true, light: true, eq: true, fault: false }; } })();
+const LAYERS_ON = (() => { try { return Object.assign({ rain: true, light: true, eq: true, fault: false, fc: false }, JSON.parse(store.get("mapLayers") || "{}")); } catch (e) { return { rain: true, light: true, eq: true, fault: false }; } })();
 function starIcon(size, fill, stroke) {
   const s = Math.round(size);
   return L.divIcon({ className: "eqstar", iconSize: [s, s], iconAnchor: [s / 2, s / 2],
@@ -1917,16 +1929,82 @@ function syncLayers() {
     layers: "WMS/25K_Geomap_fault_2021", format: "image/png", transparent: true, version: "1.1.1", crs: L.CRS.EPSG4326,
     maxZoom: 18, opacity: 0.95, className: "faultl", attribution: '斷層 <a href="https://fault.gsmma.gov.tw/" target="_blank" rel="noopener">經濟部地質調查及礦業管理中心</a>' });
   want(LFAULT, LAYERS_ON.fault);
+  setFcOn(!!LAYERS_ON.fc);
   $("r-player").hidden = !LAYERS_ON.rain || (rgMode ? FR.length < 2 : $("r-player").hidden);
   $("fault-note").hidden = !LAYERS_ON.fault;
   document.querySelectorAll("#layer-chips [data-l]").forEach(b => { b.classList.toggle("on", !!LAYERS_ON[b.dataset.l]); b.setAttribute("aria-pressed", String(!!LAYERS_ON[b.dataset.l])); });
 }
 $("layer-chips").addEventListener("click", e => {
   const b = e.target.closest("[data-l]"); if (!b) return;
-  LAYERS_ON[b.dataset.l] = !LAYERS_ON[b.dataset.l];
+  const k = b.dataset.l;
+  LAYERS_ON[k] = !LAYERS_ON[k];
+  if (k === "fc" && LAYERS_ON.fc) LAYERS_ON.rain = false;
+  if (k === "rain" && LAYERS_ON.rain) LAYERS_ON.fc = false;
   store.set("mapLayers", JSON.stringify(LAYERS_ON));
-  if (b.dataset.l === "eq" && LAYERS_ON.eq) drawEqLayer(); else syncLayers();
+  if (k === "eq" && LAYERS_ON.eq) drawEqLayer(); else syncLayers();
 });
+/* ---------- 全臺預報圖層（鄉鎮塗色＋時間拉桿）---------- */
+function topoFeatures(t, name) {
+  const tf = t.transform, arcs = tf ? t.arcs.map(a => { let x = 0, y = 0; return a.map(p => { x += p[0]; y += p[1]; return [x * tf.scale[0] + tf.translate[0], y * tf.scale[1] + tf.translate[1]]; }); }) : t.arcs;
+  const arc = i => i < 0 ? arcs[~i].slice().reverse() : arcs[i];
+  const ring = r => { const out = []; r.forEach((i, k) => { const a = arc(i); out.push(...(k ? a.slice(1) : a)); }); return out; };
+  return (t.objects[name].geometries || []).map(g => ({ type: "Feature", properties: g.properties || {},
+    geometry: g.type === "Polygon" ? { type: "Polygon", coordinates: g.arcs.map(ring) } : g.type === "MultiPolygon" ? { type: "MultiPolygon", coordinates: g.arcs.map(p => p.map(ring)) } : null })).filter(f => f.geometry);
+}
+const fcKey = p => ((p.COUNTYNAME || "") + "|" + (p.TOWNNAME || "")).replace(/台/g, "臺");
+const WXCAT = c => { if (c == null) return null; const k = wxCode(c); return k <= 1 ? "晴" : k === 2 ? "多雲" : k === 3 ? "陰" : (k === 45 || k === 48) ? "霧" : k >= 95 ? "雷雨" : "雨"; };
+const WXCOL = { 晴: "#f5a623", 多雲: "#d3d7db", 陰: "#8d969e", 雨: "#3d8bd9", 雷雨: "#e0412b", 霧: "#a8d8b0" };
+const POPCOL = p => p == null ? null : p >= 80 ? "#123f6b" : p >= 60 ? "#1f6fb2" : p >= 40 ? "#4a9de0" : p >= 30 ? "#8cc3ee" : p >= 20 ? "#c7e2f7" : null;
+function fcStyle(f) {
+  const v = FC && FC.towns[fcKey(f.properties)], d = v && v[fcIdx];
+  let col = null;
+  if (d) col = fcKind === "wx" ? WXCOL[WXCAT(d[0])] : POPCOL(d[1]);
+  return { stroke: true, color: "rgba(255,255,255,.55)", weight: 0.6, fillColor: col || "#000", fillOpacity: col ? 0.62 : 0 };
+}
+function fcLabel(i) { const t = Date.parse(FC.times[i]); return twWhen(t); }
+function drawFc() {
+  if (!FCGEO || !FC) return;
+  FCGEO.setStyle(fcStyle);
+  $("fc-time").textContent = fcLabel(fcIdx);
+  $("fc-slider").value = fcIdx;
+  $("fc-legend").innerHTML = fcKind === "wx"
+    ? Object.entries(WXCOL).map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join("")
+    : [[20, "20%"], [30, "30%"], [40, "40%"], [60, "60%"], [80, "80%+"]].map(([p, l]) => `<span><i style="background:${POPCOL(p)}"></i>${l}</span>`).join("");
+}
+async function ensureFc() {
+  if (FCGEO) return true;
+  try {
+    const [t, f] = await Promise.all([fetch("data/towns-topo.json").then(r => r.json()), fetch("data/fc.json", { cache: "no-cache" }).then(r => r.json())]);
+    FC = f; fcIdx = 0;
+    FCGEO = L.geoJSON({ type: "FeatureCollection", features: topoFeatures(t, "towns") }, { style: fcStyle, onEachFeature: (ft, layer) => {
+      layer.on("click", e => {
+        const v = FC.towns[fcKey(ft.properties)], d = v && v[fcIdx];
+        const nm = (ft.properties.TOWNNAME || "") + "・" + fcLabel(fcIdx);
+        L.popup({ autoPanPadding: [20, 60] }).setLatLng(e.latlng).setContent(`<div class="eqpop"><b>${nm}</b>${d ? `<span>${WXCAT(d[0]) || ""}・降雨 <em>${d[1] ?? "—"}</em>%</span><span>氣溫約 ${d[2] ?? "—"}°</span>` : "<span>沒有預報資料</span>"}</div>`).openOn(LMAP);
+      });
+    } });
+    $("fc-slider").max = FC.times.length - 1;
+    return true;
+  } catch (e) { return false; }
+}
+async function setFcOn(on) {
+  $("fc-ctl").hidden = !on;
+  if (on) {
+    if (!(await ensureFc())) { $("fc-ctl").hidden = true; LAYERS_ON.fc = false; return; }
+    if (!LMAP.hasLayer(FCGEO)) FCGEO.addTo(LMAP);
+    if (LMAP.getZoom() > 9) LMAP.setZoom(8);
+    drawFc();
+  } else { if (FCGEO && LMAP.hasLayer(FCGEO)) LMAP.removeLayer(FCGEO); stopFc(); }
+}
+function stopFc() { clearInterval(fcTimer); fcTimer = null; $("fc-play").textContent = "▶ 播放"; }
+$("fc-kind").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (!b) return; fcKind = b.dataset.k; $("fc-kind").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); drawFc(); });
+$("fc-slider").addEventListener("input", e => { stopFc(); fcIdx = Number(e.target.value); drawFc(); });
+$("fc-play").addEventListener("click", () => {
+  if (fcTimer) { stopFc(); return; }
+  $("fc-play").textContent = "⏸ 暫停";
+  fcTimer = setInterval(() => { fcIdx = fcIdx >= FC.times.length - 1 ? 0 : fcIdx + 1; drawFc(); }, 900);
+});
+
 function flyToQuake(q) {
   if (!LMAP || q.lat == null) return false;
   if (!LAYERS_ON.eq) { LAYERS_ON.eq = true; store.set("mapLayers", JSON.stringify(LAYERS_ON)); drawEqLayer(); }

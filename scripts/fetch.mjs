@@ -533,7 +533,7 @@ async function main() {
       const tj = JSON.parse(topo), objs = Object.keys(tj.objects || {});
       const geoms = objs.length ? tj.objects[objs[0]].geometries || [] : [];
       const p0 = geoms[0] && geoms[0].properties || {};
-      const keyOf = p => (p.COUNTYNAME || p.county || "") + "|" + (p.TOWNNAME || p.town || "");
+      const keyOf = p => ((p.COUNTYNAME || p.county || "") + "|" + (p.TOWNNAME || p.town || "")).replace(/台/g, "臺");
       const matched = geoms.filter(g => townData[keyOf(g.properties || {})]).length;
       status.seen.topo = { objects: objs, n: geoms.length, props: Object.keys(p0), sample: p0, matched, bytes: topo.length,
         missing: geoms.filter(g => !townData[keyOf(g.properties || {})]).slice(0, 8).map(g => keyOf(g.properties || {})) };
