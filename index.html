@@ -297,8 +297,8 @@ main { touch-action: pan-y; }
 .map { position: relative; display: block; border-radius: 8px; overflow: hidden; background: var(--cloth2); }
 .map img { display: block; width: 100%; height: auto; min-height: 120px; }
 .map svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-.tlab circle { fill: #fff; stroke: #1c2a33; stroke-width: 3; }
-.tlab text { font-family: var(--display); font-weight: 700; font-size: 40px; fill: #1c2a33; stroke: #fff; stroke-width: 7px; paint-order: stroke; stroke-linejoin: round; }
+.tlab circle { fill: #fff; stroke: #1c2a33; stroke-width: 2.4; }
+.tlab text { font-family: var(--display); font-weight: 600; font-size: 27px; fill: #1c2a33; stroke: #fff; stroke-width: 5px; paint-order: stroke; stroke-linejoin: round; }
 .map .lt { fill: #ffd400; stroke: #4a3a00; stroke-width: 2; }
 .map .lt.g { fill: #ff3b30; stroke: #fff; }
 .map .me { fill: none; stroke: #111; stroke-width: 5; }
@@ -1669,10 +1669,11 @@ function drawTempLabels(m, O) {
   for (const [name, t, lat, lon] of sorted) {
     const x = (lon - lo0) / (lo1 - lo0) * W, y = (la1 - lat) / (la1 - la0) * H;
     if (x < 10 || x > W - 10 || y < 10 || y > H - 10) { if (/金門|馬祖|東引|烏坵/.test(name) || lon < lo0 || lat > la1) isl.push(`${name} ${t.toFixed(1)}°`); continue; }
-    const box = [x + 8, y - 28, x + 112, y + 16];
+    if (y < 70 || x > 770) continue;
+    const box = [x + 6, y - 20, x + 78, y + 11];
     if (placed.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
     placed.push(box);
-    out.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6"/><text x="${(x + 12).toFixed(1)}" y="${(y + 13).toFixed(1)}">${t.toFixed(1)}</text>`);
+    out.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5"/><text x="${(x + 9).toFixed(1)}" y="${(y + 9).toFixed(1)}">${t.toFixed(1)}</text>`);
   }
   svg.innerHTML = out.join("");
   $("temp-isl").textContent = isl.length ? "離島：" + isl.join("・") : "";
