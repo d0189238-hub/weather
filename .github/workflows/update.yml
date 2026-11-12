@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "7,37 * * * *"   # 每半小時（第 7、37 分），GitHub 可能延後幾分鐘
+    - cron: "7,37 * * * *"   # 備援；主要由 cron-job.org 每 10 分鐘觸發
   workflow_dispatch:
 
 permissions:
@@ -24,15 +24,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: 安裝圖片與推播套件
+        run: npm install --no-save --no-package-lock --no-audit --no-fund pngjs@7 jpeg-js@0.4 web-push@3
       - name: 抓取中央氣象署與環境部資料
         env:
           CWA_KEY: ${{ secrets.CWA_KEY }}
           MOENV_KEY: ${{ secrets.MOENV_KEY }}
+          PUSH_SUB: ${{ secrets.PUSH_SUB }}
           OUT_DIR: _site/data
         run: node scripts/fetch.mjs
       - name: 整理網站檔案
         run: |
-          cp -r index.html manifest.webmanifest icons _site/
+          cp -r index.html manifest.webmanifest sw.js icons _site/
           sed -i "s/__BUILD__/${GITHUB_SHA}/" _site/index.html
           echo "{\"v\":\"${GITHUB_SHA}\"}" > _site/version.json
       - uses: actions/upload-pages-artifact@v3

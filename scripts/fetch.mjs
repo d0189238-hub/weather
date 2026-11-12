@@ -2,9 +2,11 @@
 // 金鑰只從環境變數讀（GitHub Secrets：CWA_KEY、MOENV_KEY），不會寫進任何輸出檔。
 import { mkdir, writeFile, readFile, unlink } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 const CWA = (process.env.CWA_KEY || "").trim();
 const MOENV = (process.env.MOENV_KEY || "").trim();
+const PUSH = (process.env.PUSH_SUB || "").trim();
 const OUT = process.env.OUT_DIR || "data";
 
 // 各縣市「鄉鎮預報」資料集編號：[未來 3 天, 未來 1 週]
@@ -18,7 +20,7 @@ const IDS = {
 };
 
 const status = { started: new Date().toISOString(), cwaKey: !!CWA, moenvKey: !!MOENV, errors: [], counties: {}, seen: {} };
-const scrub = s => String(s).split(CWA || "\u0000").join("***").split(MOENV || "\u0000").join("***");
+const scrub = s => { let t = String(s).split(CWA || "\u0000").join("***").split(MOENV || "\u0000").join("***"); try { const c = JSON.parse(PUSH); for (const v of [c.priv, c.sub && c.sub.endpoint, c.sub && c.sub.keys && c.sub.keys.auth]) if (v) t = t.split(v).join("***"); } catch (e) {} return t; };
 const fail = (where, e) => { status.errors.push(where + ": " + scrub(e && e.message || e).slice(0, 300)); };
 
 // 不分大小寫取欄位，氣象署改過幾次欄位大小寫
@@ -144,7 +146,7 @@ function nearest(list, lat, lon, county, town) {
 
 async function main() {
   await mkdir(OUT, { recursive: true });
-  const towns = {};
+  const towns = {}, townData = {};
   // 歷史：從上一版網站讀回來，再接上這次的觀測（每小時一筆，留 26 小时）
   const site = process.env.SITE_URL || (process.env.GITHUB_REPOSITORY ? "https://" + process.env.GITHUB_REPOSITORY.split("/")[0].toLowerCase() + ".github.io/" + process.env.GITHUB_REPOSITORY.split("/")[1] + "/" : "");
   let hist = {};
@@ -211,6 +213,7 @@ async function main() {
       status.counties[name] = list.length;
       if (!list.length) throw new Error("沒有解析出任何鄉鎮");
       towns[name] = list;
+      for (const t of list) townData[name + "|" + t] = out[t];
       await writeFile(OUT + "/" + d3 + ".json", JSON.stringify({ county: name, updated: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 19) + "+08:00", towns: out }));
     } catch (e) { fail("預報 " + name, e); }
   }
@@ -235,6 +238,7 @@ async function main() {
   for (const c of ["magick", "convert"]) { try { execFileSync(c, ["-version"], { stdio: "ignore" }); magick = c; break; } catch (e) {} }
   status.magick = magick;
   const maps = {};
+  let radarBuf = null;
   const IMG = /^https?:\/\/\S+\.(jpe?g|png)(\?\S*)?$/i;
   const MAPS = [
     ["radar", ["O-A0058-004", "O-A0058-003"]], ["ir", ["O-C0042-002"]], ["vis", ["O-C0042-008"]],
@@ -251,6 +255,7 @@ async function main() {
         if (buf.length < 5000) throw new Error("圖檔太小");
         const raw = OUT + "/raw-" + key + (/\.png/i.test(u) ? ".png" : ".jpg"), file = "map-" + key + ".jpg";
         await writeFile(raw, buf);
+        if (key === "radar" && /\.png/i.test(u)) radarBuf = buf;
         let size = null;
         if (magick) {
           try {
@@ -330,6 +335,130 @@ async function main() {
     } catch (e) { fail("警特報", e); }
   }
   await writeFile(OUT + "/warn.json", JSON.stringify({ time: new Date().toISOString(), warn }));
+
+  // ---------- 雷達動畫：每次存一張縮小的雷達圖，保留最近 2 小時 ----------
+  const libs = {};
+  for (const [k, m] of [["png", "pngjs"], ["jpeg", "jpeg-js"], ["push", "web-push"]]) {
+    try { const x = await import(m); libs[k] = x.default || x; } catch (e) { status.seen["lib-" + m] = "missing"; }
+  }
+  const radarFrames = { frames: [] };
+  try {
+    let prev = { frames: [] };
+    if (site) { try { const r = await fetch(site + "data/radar.json?t=" + Date.now(), { signal: AbortSignal.timeout(20000) }); if (r.ok) prev = await r.json(); } catch (e) {} }
+    await mkdir(OUT + "/radar", { recursive: true });
+    const keep = [];
+    const newest = maps.radar && maps.radar.time ? Date.parse(maps.radar.time) : Date.now();
+    for (const f of prev.frames || []) {
+      if (!f || !f.file || !f.time || newest - Date.parse(f.time) > 125 * 60e3) continue;
+      if (maps.radar && f.time === maps.radar.time) continue;
+      try {
+        const r = await fetch(site + "data/" + f.file, { signal: AbortSignal.timeout(20000) });
+        if (!r.ok) continue;
+        await writeFile(OUT + "/" + f.file, Buffer.from(await r.arrayBuffer()));
+        keep.push(f);
+      } catch (e) {}
+    }
+    if (radarBuf && libs.png && libs.jpeg && maps.radar) {
+      const src = libs.png.PNG.sync.read(radarBuf), S = 4, w = Math.floor(src.width / S), h = Math.floor(src.height / S);
+      const out = Buffer.alloc(w * h * 4);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        let r = 0, g = 0, b = 0;
+        for (let dy = 0; dy < S; dy++) for (let dx = 0; dx < S; dx++) {
+          const i = ((y * S + dy) * src.width + x * S + dx) * 4, a = src.data[i + 3] / 255;
+          r += src.data[i] * a + 255 * (1 - a); g += src.data[i + 1] * a + 255 * (1 - a); b += src.data[i + 2] * a + 255 * (1 - a);
+        }
+        const o = (y * w + x) * 4, n = S * S;
+        out[o] = r / n; out[o + 1] = g / n; out[o + 2] = b / n; out[o + 3] = 255;
+      }
+      const t = maps.radar.time || new Date().toISOString(), name = "radar/r-" + Math.floor(Date.parse(t) / 60e3) + ".jpg";
+      await writeFile(OUT + "/" + name, libs.jpeg.encode({ data: out, width: w, height: h }, 78).data);
+      keep.push({ file: name, time: t });
+    }
+    keep.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+    radarFrames.frames = keep.slice(-13);
+    status.seen.radarFrames = radarFrames.frames.length;
+  } catch (e) { fail("雷達動畫", e); }
+  await writeFile(OUT + "/radar.json", JSON.stringify(radarFrames));
+
+  // ---------- 下雨通知 ----------
+  let pushCfg = null;
+  if (PUSH) { try { pushCfg = JSON.parse(PUSH); } catch (e) { fail("下雨通知", "PUSH_SUB 不是正確的訂閱碼，請重新複製"); } }
+  if (pushCfg && libs.push) {
+    try {
+      const hash = s => createHash("sha1").update(String(s)).digest("hex").slice(0, 12);
+      let state = { sent: {} };
+      if (site) { try { const r = await fetch(site + "data/push-state.json?t=" + Date.now(), { signal: AbortSignal.timeout(20000) }); if (r.ok) state = await r.json(); } catch (e) {} }
+      state.sent = state.sent || {};
+      const now = Date.now(), twH = new Date(now + 8 * 3600e3).getUTCHours(), quiet = twH >= 22 || twH < 7;
+      for (const k in state.sent) if (now - state.sent[k] > 30 * 3600e3) delete state.sent[k];
+      const lines = [];
+      const once = (key, coolH, text) => {
+        const k = hash(key);
+        if (state.sent[k] && now - state.sent[k] < coolH * 3600e3) return;
+        state.sent[k] = now; lines.push(text);
+      };
+      // 雷達格點：最近 10 公里內的最大回波
+      let grid = null;
+      try {
+        const j = await fileapi("O-A0059-001");
+        const nums = [], strs = [];
+        const walk = (o, path) => {
+          if (typeof o === "string" && o.length > 100000) strs.push(o);
+          else if (o && typeof o === "object") for (const k in o) walk(o[k], k);
+        };
+        walk(j);
+        const pick = re => { const v = findKey(j, re); return v == null ? null : Number(v); };
+        const content = strs.sort((a, b) => b.length - a.length)[0];
+        if (content) {
+          const v = content.split(/[\s,]+/).filter(Boolean).map(Number);
+          const X = pick(/^griddimensionx$/i) || 921, Y = pick(/^griddimensiony$/i) || 881;
+          const lon0 = pick(/^startpointlongitude$/i) || 115, lat0 = pick(/^startpointlatitude$/i) || 18, res = pick(/^gridresolution$/i) || 0.0125;
+          if (v.length === X * Y) grid = { v, X, Y, lon0, lat0, res };
+          status.seen.radarGrid = { n: v.length, X, Y, lon0, lat0, res, max: v.reduce((m, x) => x < 100 && x > m ? x : m, -999) };
+        } else status.seen.radarGrid = "no content";
+      } catch (e) { fail("雷達格點", e); }
+      const echo = (lat, lon, km) => {
+        if (!grid) return null;
+        const { v, X, Y, lon0, lat0, res } = grid, dLat = km / 111, dLon = km / (111 * Math.cos(lat * Math.PI / 180));
+        let m = -99;
+        for (let y = Math.max(0, Math.floor((lat - dLat - lat0) / res)); y <= Math.min(Y - 1, Math.ceil((lat + dLat - lat0) / res)); y++)
+          for (let x = Math.max(0, Math.floor((lon - dLon - lon0) / res)); x <= Math.min(X - 1, Math.ceil((lon + dLon - lon0) / res)); x++) {
+            const val = v[y * X + x];
+            if (val > m && val < 100) m = val;
+          }
+        return m;
+      };
+      for (const p of pushCfg.places || []) {
+        const T = townData[p.c + "|" + p.t]; if (!T) continue;
+        const name = p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t;
+        if (!quiet) {
+          const e10 = echo(T.lat, T.lon, 10);
+          if (e10 !== null && e10 >= 30) once("rd|" + p.c + p.t, 3, `${name}附近 10 公里內有雨（雷達回波 ${Math.round(e10)} dBZ），衣服記得收`);
+          const rows = (T.f || []).map(r => ({ ms: Date.parse(r[0]), p: r[3] })).filter(r => r.p != null);
+          const cur = rows.filter(r => r.ms <= now).pop(), up = rows.find(r => r.ms > now && r.ms <= now + 3 * 3600e3 && r.p >= 70);
+          if (up && (!cur || cur.p < 50)) {
+            const hh = new Date(up.ms + 8 * 3600e3).getUTCHours();
+            once("fc|" + p.c + p.t + "|" + up.ms, 24, `${name} ${hh} 點起降雨機率 ${up.p}%，有曬衣服記得收`);
+          }
+        }
+        for (const z of warn[p.c] || []) once("wn|" + p.c + "|" + z.name + "|" + z.end, 24, `${p.c}發布${z.name}`);
+      }
+      const ep = hash(pushCfg.sub && pushCfg.sub.endpoint);
+      if (!state.hello || state.hello !== ep) { state.hello = ep; lines.unshift("下雨通知開通了，之後快下雨會提醒你"); }
+      status.seen.push = { places: (pushCfg.places || []).length, lines: lines.length, quiet };
+      if (lines.length) {
+        libs.push.setVapidDetails(site || "https://github.com", pushCfg.pub, pushCfg.priv);
+        try {
+          await libs.push.sendNotification(pushCfg.sub, JSON.stringify({ title: "曬衣服嗎", body: lines.join("\n"), tag: "rain", url: site || "./" }), { TTL: 1800, urgency: "high" });
+          status.seen.pushSent = lines.length;
+        } catch (e) {
+          fail("下雨通知", (e.statusCode === 404 || e.statusCode === 410) ? "手機上的訂閱已失效，請在網頁重新開通並更新 PUSH_SUB" : "傳送失敗 " + (e.statusCode || "") + " " + (e.body || e.message || ""));
+          if (lines[0] && lines[0].startsWith("下雨通知開通")) state.hello = null;
+        }
+      }
+      await writeFile(OUT + "/push-state.json", JSON.stringify(state));
+    } catch (e) { fail("下雨通知", e); }
+  } else if (pushCfg) fail("下雨通知", "缺少 web-push 套件");
 
   status.totalTowns = Object.values(status.counties).reduce((a, b) => a + b, 0);
   status.finished = new Date().toISOString();

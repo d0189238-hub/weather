@@ -136,6 +136,9 @@ svg.ic .wet { stroke: var(--rain); }
 .prow.shift { transition: transform .15s; }
 .grip { flex: none; width: 44px; height: 52px; display: grid; place-items: center; color: var(--muted); touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
 .phint { font-size: 15px; color: var(--muted); margin-top: -16px; }
+#push-box p { font-size: 16px; }
+#push-box .phint { margin-top: 8px; }
+#push-code { width: 100%; font: 13px/1.4 ui-monospace, monospace; padding: 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--paper); color: var(--muted); resize: none; }
 .pick {
   flex: 1; min-width: 0; display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 12px;
   padding: 14px 0; font: inherit; color: inherit; background: none; border: 0; text-align: left; cursor: pointer;
@@ -257,6 +260,10 @@ main { touch-action: pan-y; }
 .map .me { fill: none; stroke: #111; stroke-width: 5; }
 .map .me2 { fill: #fff; stroke: #111; stroke-width: 3; }
 .cap { font-size: 16px; color: var(--muted); }
+.player { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; }
+.player .btn { padding: 6px 12px; white-space: nowrap; }
+.player input { width: 100%; accent-color: var(--rain); }
+#r-time { font-family: var(--display); font-weight: 600; font-size: 20px; min-width: 52px; text-align: right; }
 .thumb { display: grid; grid-template-columns: 112px 1fr; gap: var(--s2); align-items: center; }
 .thumb img { width: 112px; height: 112px; object-fit: cover; border-radius: 6px; background: var(--cloth2); }
 .thumb .lines { display: flex; flex-direction: column; gap: 6px; }
@@ -554,6 +561,11 @@ main { touch-action: pan-y; }
   <section class="v-obs" id="o-radar" hidden>
     <h2>雷達回波・閃電</h2>
     <a class="map" id="radar-link" target="_blank" rel="noopener"><img id="radar-img" alt="雷達整合回波圖，疊上過去一小時的閃電位置"><svg id="radar-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+    <div class="player" id="r-player" hidden>
+      <button type="button" class="btn ghost" id="r-play" aria-label="播放雷達動畫">▶ 播放</button>
+      <input type="range" id="r-slider" min="0" max="0" step="1" value="0" aria-label="選擇雷達圖時間">
+      <span id="r-time"></span>
+    </div>
     <span class="cap" id="radar-cap"></span>
     <span class="cap" id="light-cap"></span>
   </section>
@@ -611,6 +623,16 @@ main { touch-action: pan-y; }
         <select id="a-town" aria-label="鄉鎮市區"></select>
       </div>
       <button type="button" class="btn" id="a-ok">加入並查看</button>
+    </div>
+    <div class="padd" id="push-box">
+      <span class="muted">下雨通知</span>
+      <p id="push-msg"></p>
+      <button type="button" class="btn" id="push-on" hidden>開啟下雨通知</button>
+      <div id="push-code-box" hidden>
+        <textarea id="push-code" readonly rows="4" aria-label="訂閱碼"></textarea>
+        <div class="pair"><button type="button" class="btn" id="push-copy">複製訂閱碼</button><button type="button" class="btn ghost" id="push-test">測試通知</button></div>
+        <p class="phint" id="push-steps"></p>
+      </div>
     </div>
   </div>
 </div>
@@ -1229,7 +1251,7 @@ document.querySelectorAll("[data-go]").forEach(el => {
   el.addEventListener("click", () => go(el.dataset.go));
   el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(el.dataset.go); } });
 });
-const openPanel = () => { editing = false; renderPlaces(); $("panel").hidden = false; $("p-close").focus(); };
+const openPanel = () => { editing = false; renderPlaces(); if (window.refreshPush) refreshPush(); $("panel").hidden = false; $("p-close").focus(); };
 const closePanel = () => { $("panel").hidden = true; $("place-btn").focus(); };
 
 $("place-btn").addEventListener("click", openPanel);
@@ -1249,6 +1271,61 @@ $("p-list").addEventListener("click", e => {
   }
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("panel").hidden) closePanel(); });
+
+/* 下雨通知：金鑰在手機上產生，訂閱碼由使用者自己存進 GitHub Secrets */
+(() => {
+  const b64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const fromB64u = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), c => c.charCodeAt(0));
+  const standalone = window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+  const ok = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const msg = t => { $("push-msg").textContent = t; };
+  const code = sub => JSON.stringify({ sub: sub.toJSON ? sub.toJSON() : sub, pub: store.get("vapidPub"), priv: store.get("vapidPriv"), places: places.map(p => ({ c: p.c, t: p.t })) });
+  const showCode = sub => {
+    $("push-code").value = code(sub);
+    $("push-code-box").hidden = false; $("push-on").hidden = true;
+    $("push-steps").innerHTML = "接著到電腦或手機開 GitHub 的 weather 專案：Settings → Secrets and variables → Actions → New repository secret，Name 填 <b>PUSH_SUB</b>，Secret 貼上這段訂閱碼。<br>以後在這裡增減地點，記得重新複製、更新 PUSH_SUB。這段訂閱碼不要貼給別人。";
+  };
+  async function current() {
+    try { const reg = await navigator.serviceWorker.getRegistration(); return reg && await reg.pushManager.getSubscription(); } catch (e) { return null; }
+  }
+  window.refreshPush = async () => {
+    if (!ok || !standalone) {
+      $("push-on").hidden = true; $("push-code-box").hidden = true;
+      msg(ok || /iPhone|iPad/.test(navigator.userAgent) ? "要先把這個網頁加到主畫面：在 Safari 按「分享」→「加入主畫面」，再從主畫面的圖示打開，回到這裡開啟（需要 iOS 16.4 以上）。" : "這個瀏覽器不支援網頁通知。");
+      return;
+    }
+    const sub = await current();
+    if (sub && store.get("vapidPriv")) { msg("下雨通知已開啟。快下雨、或你的縣市發布特報時會通知你（晚上 10 點到早上 7 點不吵你，特報除外）。"); showCode(sub); }
+    else { msg("開啟後，快下雨或發布特報時會跳通知提醒你收衣服。"); $("push-on").hidden = false; $("push-code-box").hidden = true; }
+  };
+  $("push-on").addEventListener("click", async () => {
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { msg("通知權限沒有開啟。可以到 iPhone 的「設定」→「通知」→「曬衣服嗎」打開，再回來按一次。"); return; }
+      const reg = await navigator.serviceWorker.register("sw.js");
+      await navigator.serviceWorker.ready;
+      if (!store.get("vapidPriv")) {
+        const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+        store.set("vapidPub", b64u(await crypto.subtle.exportKey("raw", kp.publicKey)));
+        store.set("vapidPriv", (await crypto.subtle.exportKey("jwk", kp.privateKey)).d);
+      }
+      const old = await reg.pushManager.getSubscription(); if (old) await old.unsubscribe();
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromB64u(store.get("vapidPub")) });
+      msg("手機這邊開好了，還差最後一步：");
+      showCode(sub);
+    } catch (e) { msg("開啟失敗：" + (e && e.message || e) + "。請確認是從主畫面圖示打開的。"); }
+  });
+  $("push-copy").addEventListener("click", async () => {
+    const t = $("push-code");
+    try { await navigator.clipboard.writeText(t.value); $("push-copy").textContent = "已複製"; }
+    catch (e) { t.select(); document.execCommand && document.execCommand("copy"); $("push-copy").textContent = "已複製"; }
+    setTimeout(() => { $("push-copy").textContent = "複製訂閱碼"; }, 2000);
+  });
+  $("push-test").addEventListener("click", async () => {
+    try { const reg = await navigator.serviceWorker.ready; await reg.showNotification("曬衣服嗎", { body: "這是測試通知。真的要下雨時會像這樣提醒你。", icon: "icons/icon-192.png" }); }
+    catch (e) { msg("測試失敗：" + (e && e.message || e)); }
+  });
+})();
 
 /* 拖曳調整地點順序 */
 (() => {
@@ -1405,6 +1482,35 @@ function drawObs() {
     $("rank-cap").textContent = "全臺測站，今天 0 點到 " + twTime(O.time) + "。";
   }
 }
+/* 雷達動畫：最近 2 小時，每 10 分鐘一張 */
+let FR = [], frTimer = null, frIdx = 0;
+const hm = v => { const t = new Date(Date.parse(v) + 8 * 3600e3); return isNaN(t) ? "" : hhmm(t.getUTCHours() * 60 + t.getUTCMinutes()); };
+function showFrame(i) {
+  frIdx = i; $("r-slider").value = i;
+  const last = i === FR.length - 1 && OB && OB.maps.radar;
+  $("radar-img").src = last ? "data/" + OB.maps.radar.file + "?t=" + encodeURIComponent(OB.maps.radar.time || "") : "data/" + FR[i].file;
+  $("r-time").textContent = hm(FR[i].time);
+}
+function stopFrames() { clearInterval(frTimer); frTimer = null; $("r-play").textContent = "▶ 播放"; }
+function setFrames(list) {
+  stopFrames();
+  FR = list.filter(f => f && f.file);
+  $("r-player").hidden = FR.length < 2;
+  if (FR.length < 2) return;
+  FR.forEach(f => { const im = new Image(); im.src = "data/" + f.file; });
+  $("r-slider").max = FR.length - 1;
+  showFrame(FR.length - 1);
+}
+$("r-play").addEventListener("click", () => {
+  if (frTimer) { stopFrames(); return; }
+  $("r-play").textContent = "⏸ 暫停";
+  if (frIdx >= FR.length - 1) showFrame(0);
+  frTimer = setInterval(() => {
+    showFrame(frIdx >= FR.length - 1 ? 0 : frIdx + 1);
+  }, 600);
+});
+$("r-slider").addEventListener("input", e => { stopFrames(); showFrame(Number(e.target.value)); });
+
 /* 放大檢視：兩指縮放、單指拖曳、點兩下切換 */
 (() => {
   const box = $("zoom"), img = $("zoom-img");
@@ -1461,9 +1567,10 @@ $("rank-tabs").addEventListener("click", e => { const b = e.target.closest("[dat
 $("sat-tabs").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) { satKind = b.dataset.k; drawObs(); } });
 async function loadObs() {
   const get = f => fetch("data/" + f, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null);
-  const [m, l, o] = await Promise.all([get("maps.json"), get("lightning.json"), get("obs.json")]);
+  const [m, l, o, rf] = await Promise.all([get("maps.json"), get("lightning.json"), get("obs.json"), get("radar.json")]);
   OB = { maps: m || {}, light: l, obs: o };
   drawObs();
+  setFrames(rf && rf.frames || []);
 }
 loadObs();
 loadWarn();
