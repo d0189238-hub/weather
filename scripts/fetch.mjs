@@ -522,6 +522,39 @@ async function main() {
   } catch (e) { fail("雷達動畫", e); }
   await writeFile(OUT + "/radar.json", JSON.stringify(radarFrames));
 
+  // ---------- 全臺預報圖層：鄉鎮邊界＋逐 3 小時預報 ----------
+  try {
+    let topo = null;
+    for (const u of ["https://cdn.jsdelivr.net/npm/taiwan-atlas/towns-10t.json", "https://unpkg.com/taiwan-atlas/towns-10t.json", site && site + "data/towns-topo.json"].filter(Boolean)) {
+      try { const r = await fetch(u, { signal: AbortSignal.timeout(30000) }); if (r.ok) { const t = await r.text(); if (t.length > 50000 && t.includes('"Topology"')) { topo = t; status.seen.topoFrom = u.replace(/\?.*$/, ""); break; } } } catch (e) {}
+    }
+    if (topo) {
+      await writeFile(OUT + "/towns-topo.json", topo);
+      const tj = JSON.parse(topo), objs = Object.keys(tj.objects || {});
+      const geoms = objs.length ? tj.objects[objs[0]].geometries || [] : [];
+      const p0 = geoms[0] && geoms[0].properties || {};
+      const keyOf = p => (p.COUNTYNAME || p.county || "") + "|" + (p.TOWNNAME || p.town || "");
+      const matched = geoms.filter(g => townData[keyOf(g.properties || {})]).length;
+      status.seen.topo = { objects: objs, n: geoms.length, props: Object.keys(p0), sample: p0, matched, bytes: topo.length,
+        missing: geoms.filter(g => !townData[keyOf(g.properties || {})]).slice(0, 8).map(g => keyOf(g.properties || {})) };
+    } else fail("鄉鎮邊界", "下載失敗");
+    // 預報：從現在起每 3 小時一格，共 16 格（48 小時）
+    const now3 = Math.ceil(Date.now() / 3 / 3600e3) * 3 * 3600e3;
+    const times = []; for (let k = 0; k < 16; k++) times.push(now3 + k * 3 * 3600e3);
+    const fc = { times: times.map(t => new Date(t).toISOString()), towns: {} };
+    for (const k in townData) {
+      const rows = (townData[k].f || []).map(r => [Date.parse(r[0]), r]).filter(x => !isNaN(x[0])).sort((a, b) => a[0] - b[0]);
+      if (!rows.length) continue;
+      fc.towns[k] = times.map(t => {
+        let best = null; for (const x of rows) { if (x[0] <= t) best = x; else break; }
+        if (!best || t - best[0] > 6 * 3600e3) return null;
+        const r = best[1]; return [r[4] == null ? null : String(r[4]), r[3], r[1] == null ? null : Math.round(r[1])];
+      });
+    }
+    await writeFile(OUT + "/fc.json", JSON.stringify(fc));
+    status.seen.fcTowns = Object.keys(fc.towns).length;
+  } catch (e) { fail("全臺預報圖層", e); }
+
   // ---------- 雷達格點：自己上色成透明雨區圖層（給互動地圖用）----------
   let grid = null;
   const rgridOut = { frames: [], bounds: null, flip: null };
