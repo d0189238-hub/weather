@@ -20,7 +20,7 @@ const IDS = {
 };
 
 const status = { started: new Date().toISOString(), cwaKey: !!CWA, moenvKey: !!MOENV, errors: [], counties: {}, seen: {} };
-const scrub = s => { let t = String(s).split(CWA || "\u0000").join("***").split(MOENV || "\u0000").join("***"); try { const c = JSON.parse(PUSH); for (const v of [c.priv, c.sub && c.sub.endpoint, c.sub && c.sub.keys && c.sub.keys.auth]) if (v) t = t.split(v).join("***"); } catch (e) {} return t; };
+const scrub = s => { let t = String(s).split(CWA || "\u0000").join("***").split(MOENV || "\u0000").join("***"); try { const c = JSON.parse(PUSH); for (const v of [c.priv, c.sub && c.sub.endpoint, c.sub && c.sub.keys && c.sub.keys.auth]) if (v && String(v).length >= 8) t = t.split(v).join("***"); } catch (e) {} return t; };
 const fail = (where, e) => { status.errors.push(where + ": " + scrub(e && e.message || e).slice(0, 300)); };
 
 // 不分大小寫取欄位，氣象署改過幾次欄位大小寫
