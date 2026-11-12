@@ -1,0 +1,11 @@
+name: 截圖檢查
+on: workflow_dispatch
+jobs:
+  shot:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for f in towns-topo.json qpf.json; do
+            curl -sL -m 30 -o x.bin "https://d0189238-hub.github.io/weather/data/$f"; gzip -9 x.bin
+            echo "B64START $f"; base64 -w 4000 x.bin.gz; echo "B64END"
+          done
