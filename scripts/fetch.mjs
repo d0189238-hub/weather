@@ -25,6 +25,43 @@ const IDS = {
 
 const status = { started: new Date().toISOString(), cwaKey: !!CWA, moenvKey: !!MOENV, errors: [], counties: {}, seen: {} };
 const scrub = s => { let t = String(s).split(CWA || "\u0000").join("***").split(MOENV || "\u0000").join("***"); if (PUSH_TOKEN.length >= 8) t = t.split(PUSH_TOKEN).join("***"); try { const c = JSON.parse(PUSH); for (const v of [c.priv, c.sub && c.sub.endpoint, c.sub && c.sub.keys && c.sub.keys.auth]) if (v && String(v).length >= 8) t = t.split(v).join("***"); } catch (e) {} return t; };
+// 氣象署定量降水預報圖的色階（每格的下限，毫米）與讀圖
+const QPF_BINS = [[0.5, [195, 195, 195]], [1, [161, 255, 255]], [2, [3, 200, 255]], [5, [5, 155, 255]], [10, [3, 100, 255]], [15, [5, 155, 2]], [20, [58, 255, 3]], [30, [255, 253, 3]], [40, [255, 203, 0]], [50, [255, 150, 0]], [70, [255, 0, 0]], [90, [209, 0, 0]], [110, [155, 0, 0]], [130, [153, 0, 156]], [150, [207, 0, 210]], [200, [255, 0, 255]], [300, [255, 203, 255]]];
+function qpfGrid(img, o) {
+  const { width: W, height: H, data } = img;
+  if (W !== 1245 || H !== 1500) return null;
+  const px = (x, y) => { const i = (y * W + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
+  // 版面檢查：外框黑線在 y=152、x=13
+  const dk = (x, y) => { const c = px(x, y); return c[0] + c[1] + c[2] < 300; };
+  if (!dk(600, 152) || !dk(13, 800) || !dk(600, 1488)) return null;
+  // 經緯度 → 圖上位置（用本島四端點與澎湖、蘭嶼對過）
+  const toX = lon => 380 + (lon - 120.035) * 366.1, toY = lat => 201 + (25.299 - lat) * 359.5;
+  const cls = c => {
+    if (c[0] >= 248 && c[1] >= 248 && c[2] >= 248) return 0;          // 陸地白色：沒雨
+    if (Math.abs(c[0] - 237) + Math.abs(c[1] - 249) + Math.abs(c[2] - 254) < 8) return -1;   // 海
+    let best = -2, bd = 40;
+    QPF_BINS.forEach(([, k], i) => { const d = Math.abs(c[0] - k[0]) + Math.abs(c[1] - k[1]) + Math.abs(c[2] - k[2]); if (d < (i ? bd : Math.min(bd, 14))) { bd = d; best = i + 1; } });
+    return best;   // -2：線條或文字
+  };
+  const cells = new Uint8Array(o.X * o.Y); let max = 0;
+  for (let gy = 0; gy < o.Y; gy++) for (let gx = 0; gx < o.X; gx++) {
+    const lon = o.lon0 + (gx + 0.5) * o.res, lat = o.lat0 + (gy + 0.5) * o.res;
+    const x0 = Math.round(toX(lon)), y0 = Math.round(toY(lat));
+    // 取附近像素裡最多的顏色（避開縣市界線與反鋸齒的灰邊）
+    let v = -2;
+    for (let r = 1; r <= 4 && v === -2; r++) {
+      const cnt = {};
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const x = x0 + dx, y = y0 + dy; if (x < 16 || y < 155 || x > 1227 || y > 1485) continue;
+        const c = cls(px(x, y)); if (c >= -1) cnt[c] = (cnt[c] || 0) + 1;
+      }
+      let bn = 0; for (const k in cnt) if (cnt[k] > bn || (cnt[k] === bn && Number(k) > v)) { bn = cnt[k]; v = Number(k); }
+    }
+    const val = v < 0 ? 0 : v;
+    cells[gy * o.X + gx] = val; if (val > max) max = val;
+  }
+  return { cells, max };
+}
 const fail = (where, e) => { status.errors.push(where + ": " + scrub(e && e.message || e).slice(0, 300)); };
 
 // 不分大小寫取欄位，氣象署改過幾次欄位大小寫
@@ -427,6 +464,31 @@ async function main() {
   for (const [k, m] of [["png", "pngjs"], ["jpeg", "jpeg-js"], ["push", "web-push"]]) {
     try { const x = await import(m); libs[k] = x.default || x; } catch (e) { status.seen["lib-" + m] = "missing"; }
   }
+  // ---------- 定量降水預報（氣象署 12 小時累積雨量圖 I～IV，讀圖上的顏色換回毫米）----------
+  const qpfOut = { periods: [], lon0: 119.95, lat0: 21.87, res: 0.0125, X: 168, Y: 277, bins: QPF_BINS.map(b => b[0]) };
+  if (CWA && libs.png) {
+    for (const [n, id] of [[1, "F-C0035-015"], [2, "F-C0035-017"], [3, "F-C0035-023"], [4, "F-C0035-024"]]) {
+      try {
+        const j = await fileapi(id), u = findUrl(j, IMG), sent = findKey(j, /^sent$/i);
+        if (!u || !sent) throw new Error("找不到圖檔");
+        const r = await fetch(u, { signal: AbortSignal.timeout(60000) });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const buf = Buffer.from(await r.arrayBuffer()), img = libs.png.PNG.sync.read(buf);
+        const g = qpfGrid(img, qpfOut);
+        if (!g) throw new Error("圖的版面跟預期不同 " + img.width + "x" + img.height);
+        // 發布時間 → 第一段從 08 或 20 點開始，每段 12 小時
+        const tw = new Date(Date.parse(sent) + 8 * 3600e3), hr = tw.getUTCHours();
+        const base = Date.UTC(tw.getUTCFullYear(), tw.getUTCMonth(), tw.getUTCDate()) - 8 * 3600e3;
+        const start0 = hr >= 3 && hr < 15 ? base + 8 * 3600e3 : hr >= 15 ? base + 20 * 3600e3 : base - 4 * 3600e3;
+        const from = start0 + (n - 1) * 12 * 3600e3;
+        await writeFile(OUT + "/qpf-" + n + ".png", buf);
+        qpfOut.periods.push({ n, from: new Date(from).toISOString(), to: new Date(from + 12 * 3600e3).toISOString(), sent, img: "qpf-" + n + ".png", g: Buffer.from(g.cells).toString("base64"), max: g.max });
+      } catch (e) { fail("雨量預報 " + id, e); }
+    }
+    status.seen.qpf = qpfOut.periods.map(p => p.n + ":" + p.max);
+  }
+  await writeFile(OUT + "/qpf.json", JSON.stringify(qpfOut));
+
   // ---------- 衛星雲圖動畫（氣象署官網高解析圖，最近 2 小時，每 10 分鐘一張）----------
   const satOut = {};
   try {

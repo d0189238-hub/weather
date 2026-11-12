@@ -343,6 +343,9 @@ main { touch-action: pan-y; }
 .sm-isl { display: flex; gap: 10px; font-size: 13px; color: var(--muted); align-self: flex-start; }
 .sm-isl i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--line); }
 #o-sm[hidden] { display: none; }
+.sm-me { margin: 4px 0 0; font-size: 16px; }
+.sm-me em { font-style: normal; font-family: var(--display); font-size: 22px; font-weight: 600; }
+.smf[data-img] { cursor: zoom-in; }
 .eqbar { display: flex; align-items: center; gap: 10px; width: 100%; font: inherit; font-size: 16px; text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
 .eqbar[hidden] { display: none; }
 .eqbar .tag { flex: none; font-size: 13px; font-weight: 700; color: #fff; background: #e0412b; border-radius: 10px; padding: 2px 8px; }
@@ -672,10 +675,11 @@ main { touch-action: pan-y; }
     <div id="ty-body"></div>
   </section>
   <section class="v-obs" id="o-sm" hidden>
-    <div class="sat-h"><h2>未來 24 小時</h2><span class="sat-t" id="sm-kind"><button type="button" class="on" data-k="wx">天氣</button><button type="button" data-k="pop">降雨</button><button type="button" data-k="temp">溫度</button></span></div>
+    <div class="sat-h"><h2 id="sm-title">未來 24 小時</h2><span class="sat-t" id="sm-kind"><button type="button" class="on" data-k="wx">天氣</button><button type="button" data-k="rain">雨量</button><button type="button" data-k="temp">溫度</button></span></div>
     <div class="sm-grid" id="sm-grid"></div>
     <div class="fc-legend" id="sm-legend"></div>
-    <span class="cap">每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。</span>
+    <p class="sm-me" id="sm-me" hidden></p>
+    <span class="cap" id="sm-cap">每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。</span>
   </section>
   <section class="v-obs" id="o-radar" hidden>
     <div class="sat-h"><h2>即時地圖</h2><span class="sat-t" id="base-tabs" hidden><button type="button" class="on" data-b="photo">衛星</button><button type="button" data-b="map">簡潔</button></span></div>
@@ -2211,28 +2215,57 @@ function smColor(d) {
 async function loadSmall() {
   if (SM) return SM;
   try {
-    const [t, f] = await Promise.all([fetch("data/towns-topo.json").then(r => r.json()), fetch("data/fc.json", { cache: "no-cache" }).then(r => r.json())]);
+    const [t, f, q] = await Promise.all([fetch("data/towns-topo.json").then(r => r.json()), fetch("data/fc.json", { cache: "no-cache" }).then(r => r.json()),
+      fetch("data/qpf.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null)]);
     const towns = topoFeatures(t, "towns").map(ft => ({ key: fcKey(ft.properties), geom: ft.geometry }));
     const counties = t.objects.counties ? topoFeatures(t, "counties").map(ft => ft.geometry) : [];
-    SM = { towns, counties, fc: f };
+    if (q && q.periods) q.periods.forEach(p => { const b = atob(p.g), a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); p.cells = a; });
+    SM = { towns, counties, fc: f, qpf: q && q.periods && q.periods.length ? q : null };
   } catch (e) { SM = null; }
   return SM;
 }
+/* 雨量預報：氣象署每 12 小時累積雨量（毫米），色階 index 1..17 對應 0.5、1、2、5、10、15、20、30、40、50、70、90、110、130、150、200、300 */
+const QPF_LO = [0, 0.5, 1, 2, 5, 10, 15, 20, 30, 40, 50, 70, 90, 110, 130, 150, 200, 300], QPF_HI = [0.5, 1, 2, 5, 10, 15, 20, 30, 40, 50, 70, 90, 110, 130, 150, 200, 300, 400];
+const QPF_SHOW = [[0.5, "#cfe6f7"], [2, "#93c7ee"], [5, "#4f9fe2"], [10, "#2370c8"], [20, "#1d469c"], [40, "#5a2b9c"], [70, "#a3207a"], [130, "#d81b60"]];
+const qpfCol = c => { if (!c) return null; const mm = QPF_LO[c]; let col = null; for (const [v, k] of QPF_SHOW) if (mm >= v) col = k; return col; };
+const qpfAt = (q, p, lat, lon) => { const gx = Math.floor((lon - q.lon0) / q.res), gy = Math.floor((lat - q.lat0) / q.res); if (gx < 0 || gy < 0 || gx >= q.X || gy >= q.Y) return null; let m = 0; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const y = gy + a, x = gx + b; if (x >= 0 && y >= 0 && x < q.X && y < q.Y) m = Math.max(m, p.cells[y * q.X + x]); } return m; };
+const twH = ms => { const t = new Date(ms + 8 * 3600e3), h = t.getUTCHours(), d = Math.round((Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) - Math.floor((Date.now() + 8 * 3600e3) / 864e5) * 864e5) / 864e5);
+  const day = d === 0 ? (h >= 18 ? "今晚" : h < 12 ? "今早" : "今天") : d === 1 ? (h >= 18 ? "明晚" : h < 12 ? "明早" : "明天") : d === 2 ? (h >= 18 ? "後天晚上" : h < 12 ? "後天早上" : "後天") : (t.getUTCMonth() + 1) + "/" + t.getUTCDate();
+  return day + " " + (h > 12 ? h - 12 : h) + " 點"; };
 function drawSmall() {
   if (!SM) return;
-  const box = $("sm-grid"), fc = SM.fc;
-  const idx = [0, 2, 4, 6].filter(i => i < fc.times.length);
+  const box = $("sm-grid"), fc = SM.fc, Q = smKind === "rain" ? SM.qpf : null;
+  if (smKind === "rain" && !Q) { smKind = "pop"; }
+  const idx = Q ? Q.periods.map((p, i) => i).slice(0, 4) : [0, 2, 4, 6].filter(i => i < fc.times.length);
+  $("sm-title").textContent = Q ? "未來 48 小時雨量" : "未來 24 小時";
+  $("sm-cap").textContent = Q ? "每張是 12 小時內預計的累積雨量（毫米），氣象署定量降水預報，點地圖看原圖。" : "每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。";
   const lo0 = 119.95, lo1 = 122.05, la0 = 21.87, la1 = 25.33, k = Math.cos(23.6 * Math.PI / 180);
   const cw = Math.floor((box.clientWidth - 10) / 2) || 160, ch = Math.round(cw * (la1 - la0) / ((lo1 - lo0) * k));
   const dpr = Math.min(3, window.devicePixelRatio || 1), sx = cw / (lo1 - lo0), sy = ch / (la1 - la0);
   const P = ([x, y]) => [(x - lo0) * sx, (la1 - y) * sy];
   const path = (ctx, g) => { const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates; ctx.beginPath(); for (const poly of polys) for (const ring of poly) ring.forEach((p, i) => { const [x, y] = P(p); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); };
   const dark = document.documentElement.dataset.sky === "night";
-  box.innerHTML = idx.map((i, n) => `<figure class="smf"><figcaption>${fcLabel(i)}</figcaption><canvas width="${cw * dpr}" height="${ch * dpr}" style="width:${cw}px;height:${ch}px"></canvas><div class="sm-isl" data-n="${n}"></div></figure>`).join("");
+  box.innerHTML = idx.map((i, n) => `<figure class="smf"${Q ? ` data-img="data/${Q.periods[i].img}"` : ""}><figcaption>${Q ? twH(Date.parse(Q.periods[i].from)) + " 起" : fcLabel(i)}</figcaption><canvas width="${cw * dpr}" height="${ch * dpr}" style="width:${cw}px;height:${ch}px"></canvas><div class="sm-isl" data-n="${n}"></div></figure>`).join("");
   box.querySelectorAll("canvas").forEach((cv, n) => {
     const ctx = cv.getContext("2d"), i = idx[n];
     ctx.scale(dpr, dpr);
-    for (const t of SM.towns) {
+    if (Q) {
+      // 先畫陸地底色，再把雨量格子剪在陸地裡
+      const P0 = Q.periods[i], cw0 = Q.res * sx + 0.6, ch0 = Q.res * sy + 0.6;
+      ctx.beginPath();
+      for (const t of SM.towns) { const polys = t.geom.type === "Polygon" ? [t.geom.coordinates] : t.geom.coordinates; for (const poly of polys) for (const ring of poly) ring.forEach((p, j) => { const [x, y] = P(p); j ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); }
+      ctx.fillStyle = dark ? "#2a3340" : "#e9ecef"; ctx.fill("nonzero");
+      ctx.save(); ctx.clip("nonzero");
+      for (let gy = 0; gy < Q.Y; gy++) for (let gx = 0; gx < Q.X; gx++) {
+        const col = qpfCol(P0.cells[gy * Q.X + gx]); if (!col) continue;
+        const [x, y] = P([Q.lon0 + gx * Q.res, Q.lat0 + (gy + 1) * Q.res]);
+        ctx.fillStyle = col; ctx.fillRect(x, y, cw0, ch0);
+      }
+      ctx.restore();
+      ctx.strokeStyle = dark ? "rgba(0,0,0,.22)" : "rgba(255,255,255,.6)"; ctx.lineWidth = 0.4;
+      for (const t of SM.towns) { path(ctx, t.geom); ctx.stroke(); }
+    }
+    else for (const t of SM.towns) {
       const v = fc.towns[t.key], col = smColor(v && v[i]);
       path(ctx, t.geom); ctx.fillStyle = col || (dark ? "#2a3340" : "#e9ecef"); ctx.fill("evenodd");
       ctx.strokeStyle = dark ? "rgba(0,0,0,.25)" : "rgba(255,255,255,.7)"; ctx.lineWidth = 0.4; ctx.stroke();
@@ -2241,14 +2274,24 @@ function drawSmall() {
     for (const g of SM.counties) { path(ctx, g); ctx.stroke(); }
     // 金門、馬祖不在圖內，用小圓點表示
     const isl = [["金門", "金門縣|金城鎮"], ["馬祖", "連江縣|南竿鄉"]].map(([nm, key]) => { const v = fc.towns[key], col = smColor(v && v[i]); return `<span><i style="background:${col || "transparent"}"></i>${nm}</span>`; }).join("");
-    box.querySelector(`.sm-isl[data-n="${n}"]`).innerHTML = isl;
+    box.querySelector(`.sm-isl[data-n="${n}"]`).innerHTML = Q ? "" : isl;
   });
-  $("sm-legend").innerHTML = smKind === "wx"
+  // 你的地點：48 小時大約會下多少
+  const me = $("sm-me"), pl = places[active];
+  me.hidden = !(Q && here);
+  if (Q && here) {
+    let lo = 0, hi = 0, parts = [];
+    Q.periods.slice(0, 4).forEach(p => { const c = qpfAt(Q, p, here.lat, here.lon) || 0; lo += QPF_LO[c]; hi += c ? QPF_HI[c] : 0; parts.push(c); });
+    const nm = pl ? pname(pl) : "你的地點";
+    me.innerHTML = hi < 0.5 ? `<b>${nm}</b>　未來 48 小時預計不會下雨` : `<b>${nm}</b>　未來 48 小時預計累積 <em>${lo < 1 ? "不到 " + Math.ceil(hi) : Math.round(lo) + "～" + Math.round(hi)}</em> 毫米`;
+  }
+  $("sm-legend").innerHTML = Q ? QPF_SHOW.map(([v, c], j) => `<span><i style="background:${c}"></i>${v}${j === QPF_SHOW.length - 1 ? "+" : ""}</span>`).join("") + `<span class="muted">毫米</span>` : smKind === "wx"
     ? Object.entries(WXCOL).map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join("")
     : smKind === "pop" ? [[20, "20%"], [30, "30%"], [40, "40%"], [60, "60%"], [80, "80%+"]].map(([p, l]) => `<span><i style="background:${POPCOL(p)}"></i>${l}</span>`).join("")
     : [[5, "5°"], [10, "10°"], [15, "15°"], [20, "20°"], [25, "25°"], [30, "30°"], [35, "35°"]].map(([t, l]) => `<span><i style="background:${smTempCol(t)}"></i>${l}</span>`).join("");
   $("o-sm").hidden = false;
 }
+$("sm-grid").addEventListener("click", e => { const f = e.target.closest("[data-img]"); if (f && window.openZoom) openZoom(f.dataset.img, "氣象署定量降水預報"); });
 $("sm-kind").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (!b) return; smKind = b.dataset.k; $("sm-kind").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); drawSmall(); });
 async function showSmall() { if (await loadSmall()) drawSmall(); }
 addEventListener("resize", () => { if (SM && $("app").dataset.view === "obs") drawSmall(); });
