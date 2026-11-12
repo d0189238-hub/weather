@@ -4,7 +4,15 @@ jobs:
   shot:
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          sleep 5
-          google-chrome --headless=new --no-sandbox --hide-scrollbars --window-size=420,6000 --virtual-time-budget=20000 --screenshot=s.png "https://d0189238-hub.github.io/weather/?nocache=$RANDOM#obs" || true
-          echo B64START; base64 -w 4000 s.png; echo B64END
+      - env:
+          K: ${{ secrets.CWA_KEY }}
+        run: |
+          for i in $(seq -w 1 30); do
+            id=F-C0035-0$i
+            r=$(curl -s -m 20 "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/$id?Authorization=$K&downloadType=WEB&format=JSON")
+            echo "$id $(echo "$r" | python3 -c 'import sys,json
+          try:
+            j=json.load(sys.stdin); s=json.dumps(j,ensure_ascii=False); import re
+            print(re.findall(r"\"(?:resourceDesc|datasetDescription|ProductDescription|productDescription)\": \"([^\"]*)\"",s)[:2], re.findall(r"https?://[^\"]+",s)[:2])
+          except Exception as e: print("ERR")')"
+          done

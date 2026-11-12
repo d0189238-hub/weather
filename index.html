@@ -2052,7 +2052,9 @@ function setFrames(list) {
   if (FR.length < 2) return;
   FR.forEach(f => { const im = new Image(); im.src = "data/" + f.file; });
   $("r-slider").max = FR.length - 1;
-  showFrame(FR.length - 1);
+  // 預設停在「現在」（最後一張觀測），推估的格子要按播放或拖拉才看得到
+  let i = FR.length - 1; while (i > 0 && FR[i].lead) i--;
+  showFrame(i);
 }
 $("r-play").addEventListener("click", () => {
   if (frTimer) { stopFrames(); return; }
