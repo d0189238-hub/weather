@@ -1677,6 +1677,25 @@ async function loadTyEq() {
 loadTyEq();
 
 /* 溫度分布圖：標上主要氣象站的現在氣溫，太擠的自動略過 */
+let TEMP_LAB = [];
+/* 放大溫度圖時，把數字畫進圖片裡 */
+async function tempComposite() {
+  const img = $("temp-img");
+  if (!img.complete || !img.naturalWidth || !TEMP_LAB.length) return null;
+  const W = img.naturalWidth, H = img.naturalHeight, k = W / 880, cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const c = cv.getContext("2d");
+  c.drawImage(img, 0, 0);
+  try { await document.fonts.load(`600 ${Math.round(30 * k)}px "Noto Serif Display"`); } catch (e) {}
+  c.font = `600 ${Math.round(30 * k)}px "Noto Serif Display", "Noto Serif TC", serif`;
+  c.textAlign = "right"; c.textBaseline = "alphabetic"; c.lineJoin = "round";
+  for (const [x, y, t] of TEMP_LAB) {
+    c.beginPath(); c.arc(x * k, y * k, 4.2 * k, 0, Math.PI * 2); c.fillStyle = "#fff"; c.fill(); c.lineWidth = 2 * k; c.strokeStyle = "#1c2a33"; c.stroke();
+    c.lineWidth = 3 * k; c.strokeStyle = "rgba(255,255,255,.85)"; c.strokeText(t, (x - 8) * k, (y + 8) * k);
+    c.fillStyle = "#1c2a33"; c.fillText(t, (x - 8) * k, (y + 8) * k);
+  }
+  try { return cv.toDataURL("image/jpeg", 0.9); } catch (e) { return null; }
+}
 const TEMP_FIRST = ["臺北", "基隆", "新竹", "臺中", "嘉義", "臺南", "高雄", "恆春", "臺東", "花蓮", "宜蘭", "日月潭", "阿里山", "玉山", "澎湖", "成功", "梧棲"];
 function drawTempLabels(m, O) {
   const svg = $("temp-svg"), list = O && O.temps || [];
@@ -1685,6 +1704,7 @@ function drawTempLabels(m, O) {
   const rank = n => { const i = TEMP_FIRST.indexOf(n); return i < 0 ? 99 : i; };
   const sorted = list.filter(x => rank(x[0]) < 99 || /^(金門|馬祖)$/.test(x[0])).sort((a, b) => rank(a[0]) - rank(b[0]));
   const placed = [], out = [], isl = [];
+  TEMP_LAB = [];
   for (const [name, t, lat, lon] of sorted) {
     const x = (lon - lo0) / (lo1 - lo0) * W, y = (la1 - lat) / (la1 - la0) * H;
     if (x < 10 || x > W - 10 || y < 10 || y > H - 10) { if (/^(金門|馬祖)$/.test(name)) isl.push(`${name} ${t.toFixed(1)}°`); continue; }
@@ -1692,6 +1712,7 @@ function drawTempLabels(m, O) {
     const box = [x - 80, y - 18, x + 6, y + 11];
     if (placed.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
     placed.push(box);
+    TEMP_LAB.push([x, y, t.toFixed(1)]);
     out.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.2"/><text x="${(x - 8).toFixed(1)}" y="${(y + 8).toFixed(1)}">${t.toFixed(1)}</text>`);
   }
   svg.innerHTML = out.join("");
@@ -2112,7 +2133,9 @@ $("s-slider").addEventListener("input", e => { stopSat(); showSat(Number(e.targe
   window.addEventListener("resize", () => { if (!box.hidden) fit(); });
   document.querySelectorAll(".map").forEach(a => a.addEventListener("click", e => {
     if (!a.href) return;
-    e.preventDefault(); const im = a.querySelector("img"); openZoom(a.href, im ? im.alt : "");
+    e.preventDefault(); const im = a.querySelector("img");
+    if (a.id === "temp-link") { tempComposite().then(u => openZoom(u || a.href, im ? im.alt : "")); return; }
+    openZoom(a.href, im ? im.alt : "");
   }));
 })();
 $("rank-tabs").addEventListener("click", e => { const b = e.target.closest("[data-r]"); if (b) { rankKind = b.dataset.r; drawObs(); } });
