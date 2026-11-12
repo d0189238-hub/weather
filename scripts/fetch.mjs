@@ -513,6 +513,111 @@ async function main() {
   } catch (e) { fail("雷達動畫", e); }
   await writeFile(OUT + "/radar.json", JSON.stringify(radarFrames));
 
+  // ---------- 雷達格點：自己上色成透明雨區圖層（給互動地圖用）----------
+  let grid = null;
+  const rgridOut = { frames: [], bounds: null, flip: null };
+  if (CWA) {
+    try {
+      const j = await fileapi("O-A0059-001");
+      const strs = [];
+      const walk = o => { if (typeof o === "string" && o.length > 100000) strs.push(o); else if (o && typeof o === "object") for (const k in o) walk(o[k]); };
+      walk(j);
+      const pick = re => { const v = findKey(j, re); return v == null ? null : Number(v); };
+      const content = strs.sort((a, b) => b.length - a.length)[0];
+      if (content) {
+        const v = content.split(/[\s,]+/).filter(Boolean).map(Number);
+        const X = pick(/^griddimensionx$/i) || 921, Y = pick(/^griddimensiony$/i) || 881;
+        const lon0 = pick(/^startpointlongitude$/i) || 115, lat0 = pick(/^startpointlatitude$/i) || 18, res = pick(/^gridresolution$/i) || 0.0125;
+        const time = findKey(j, /^(datetime|obstime|date)$/i);
+        if (v.length === X * Y) grid = { v, X, Y, lon0, lat0, res, time, flip: false };
+        status.seen.radarGrid = { n: v.length, X, Y, lon0, lat0, res, time, max: v.reduce((m, x) => x < 100 && x > m ? x : m, -999) };
+      } else status.seen.radarGrid = "no content";
+    } catch (e) { fail("雷達格點", e); }
+  }
+  let prevG = {};
+  if (site) { try { const r = await fetch(site + "data/rgrid.json?t=" + Date.now(), { signal: AbortSignal.timeout(20000) }); if (r.ok) prevG = await r.json(); } catch (e) {} }
+  // 方向比對：把強回波格點分別用「由南往北」和「由北往南」投到氣象署雷達圖上，看哪個落在有顏色的地方
+  if (grid && libs.png) {
+    try {
+      let img = null, lon = null, lat = null;
+      try {
+        const j3 = await fileapi("O-A0058-003"), u3 = findUrl(j3, IMG);
+        if (u3) { const r = await fetch(u3, { signal: AbortSignal.timeout(60000) }); if (r.ok) { img = libs.png.PNG.sync.read(Buffer.from(await r.arrayBuffer())); lon = range(findKey(j3, /^longituderange$/i)); lat = range(findKey(j3, /^latituderange$/i)); } }
+      } catch (e) {}
+      if (!img && radarBuf && maps.radar) { img = libs.png.PNG.sync.read(radarBuf); lon = maps.radar.lon; lat = maps.radar.lat; }
+      if (img && lon && lat) {
+        const { v, X, Y, lon0, lat0, res } = grid;
+        const colorful = (px, py) => {
+          if (px < 0 || py < 0 || px >= img.width || py >= img.height) return 0;
+          const i = (py * img.width + px) * 4, r = img.data[i], g = img.data[i + 1], b = img.data[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+          return mx > 80 && (mx - mn) / mx > 0.5 ? 1 : 0;
+        };
+        let a = 0, bb = 0, n = 0;
+        for (let k = 0; k < v.length && n < 4000; k += 7) {
+          if (!(v[k] >= 35 && v[k] < 100)) continue;
+          const y = Math.floor(k / X), x = k % X, lo = lon0 + x * res;
+          const latS = lat0 + y * res, latN = lat0 + (Y - 1 - y) * res;
+          if (lo < lon[0] || lo > lon[1]) continue;
+          const px = Math.round((lo - lon[0]) / (lon[1] - lon[0]) * (img.width - 1));
+          const pyS = Math.round((lat[1] - latS) / (lat[1] - lat[0]) * (img.height - 1)), pyN = Math.round((lat[1] - latN) / (lat[1] - lat[0]) * (img.height - 1));
+          a += colorful(px, pyS); bb += colorful(px, pyN); n++;
+        }
+        status.seen.gridCheck = { samples: n, southFirst: a, northFirst: bb };
+        if (n >= 30 && Math.max(a, bb) >= n * 0.3 && Math.abs(a - bb) >= n * 0.15) rgridOut.flip = bb > a;
+      }
+    } catch (e) { fail("雷達方向比對", e); }
+  }
+  if (rgridOut.flip === null) rgridOut.flip = typeof prevG.flip === "boolean" ? prevG.flip : false;
+  if (grid) grid.flip = rgridOut.flip;
+  status.seen.gridFlip = rgridOut.flip;
+  const gv = (x, y) => grid.v[(grid.flip ? grid.Y - 1 - y : y) * grid.X + x];
+  // 上色（氣象署雷達色階），投影成 Web Mercator 的透明 PNG
+  try {
+    await mkdir(OUT + "/rgrid", { recursive: true });
+    const keep = [];
+    const newest = grid && grid.time ? Date.parse(grid.time) : Date.now();
+    for (const f of prevG.frames || []) {
+      if (!f || !f.file || !f.time || newest - Date.parse(f.time) > 125 * 60e3 || (grid && f.time === grid.time)) continue;
+      try { const r = await fetch(site + "data/" + f.file, { signal: AbortSignal.timeout(20000) }); if (r.ok) { await writeFile(OUT + "/" + f.file, Buffer.from(await r.arrayBuffer())); keep.push(f); } } catch (e) {}
+    }
+    if (grid && libs.png) {
+      const { X, Y, lon0, lat0, res } = grid;
+      const latS = lat0, latN = lat0 + (Y - 1) * res, lonW = lon0, lonE = lon0 + (X - 1) * res;
+      const merc = la => Math.log(Math.tan(Math.PI / 4 + la * Math.PI / 360));
+      const mS = merc(latS), mN = merc(latN), W = X, H = Math.round((mN - mS) / ((lonE - lonW) * Math.PI / 180) * (W - 1)) + 1;
+      const COL = [[65, [255, 255, 255]], [60, [150, 0, 220]], [55, [230, 0, 255]], [50, [190, 0, 0]], [45, [255, 0, 0]], [40, [255, 128, 0]], [35, [255, 200, 0]], [30, [255, 255, 0]], [25, [0, 150, 0]], [20, [0, 200, 0]], [15, [0, 128, 255]], [10, [0, 200, 255]]];
+      const png = new libs.png.PNG({ width: W, height: H });
+      for (let py = 0; py < H; py++) {
+        const m = mN - (mN - mS) * py / (H - 1), la = (2 * Math.atan(Math.exp(m)) - Math.PI / 2) * 180 / Math.PI;
+        const gy = Math.round((la - lat0) / res);
+        for (let px = 0; px < W; px++) {
+          const o = (py * W + px) * 4;
+          const val = gy >= 0 && gy < Y ? gv(px, gy) : -99;
+          const c = val >= 10 && val < 100 ? COL.find(z => val >= z[0]) : null;
+          if (c) { png.data[o] = c[1][0]; png.data[o + 1] = c[1][1]; png.data[o + 2] = c[1][2]; png.data[o + 3] = 255; }
+          else png.data[o + 3] = 0;
+        }
+      }
+      const t = grid.time || new Date().toISOString(), name = "rgrid/g-" + Math.floor(Date.parse(t) / 60e3) + ".png";
+      await writeFile(OUT + "/" + name, libs.png.PNG.sync.write(png));
+      keep.push({ file: name, time: t });
+      rgridOut.bounds = [[latS - res / 2, lonW - res / 2], [latN + res / 2, lonE + res / 2]];
+    } else if (prevG.bounds) rgridOut.bounds = prevG.bounds;
+    keep.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+    rgridOut.frames = keep.slice(-13);
+    status.seen.rgridFrames = rgridOut.frames.length;
+  } catch (e) { fail("雨區圖層", e); }
+  await writeFile(OUT + "/rgrid.json", JSON.stringify(rgridOut));
+  // 診斷：國土測繪中心圖資
+  if (process.env.SAT_DIAG) {
+    const out = {};
+    for (const layer of ["EMAP", "EMAP2", "EMAP5", "EMAP6", "EMAP8", "PHOTO2", "PHOTO_MIX", "TOWN", "CITY", "Village", "LUIMAP"]) {
+      try { const r = await fetch(`https://wmts.nlsc.gov.tw/wmts/${layer}/default/GoogleMapsCompatible/10/442/856`, { signal: AbortSignal.timeout(15000) }); out[layer] = r.status + " " + (r.headers.get("content-type") || "") + " " + (r.headers.get("content-length") || ""); }
+      catch (e) { out[layer] = "ERR " + String(e.message || e).slice(0, 50); }
+    }
+    status.seen.nlsc = out;
+  }
+
   // ---------- 下雨通知（登記處名單 + 舊版個人訂閱碼）----------
   const subs = [];
   if (PUSH_API && PUSH_TOKEN) {
@@ -536,30 +641,13 @@ async function main() {
       const now = Date.now(), twH = new Date(now + 8 * 3600e3).getUTCHours(), quiet = twH >= 22 || twH < 7;
       for (const k in state.sent) if (now - state.sent[k] > 30 * 3600e3) delete state.sent[k];
 
-      // 雷達格點（每次只抓一份，大家共用）
-      let grid = null;
-      try {
-        const j = await fileapi("O-A0059-001");
-        const strs = [];
-        const walk = o => { if (typeof o === "string" && o.length > 100000) strs.push(o); else if (o && typeof o === "object") for (const k in o) walk(o[k]); };
-        walk(j);
-        const pick = re => { const v = findKey(j, re); return v == null ? null : Number(v); };
-        const content = strs.sort((a, b) => b.length - a.length)[0];
-        if (content) {
-          const v = content.split(/[\s,]+/).filter(Boolean).map(Number);
-          const X = pick(/^griddimensionx$/i) || 921, Y = pick(/^griddimensiony$/i) || 881;
-          const lon0 = pick(/^startpointlongitude$/i) || 115, lat0 = pick(/^startpointlatitude$/i) || 18, res = pick(/^gridresolution$/i) || 0.0125;
-          if (v.length === X * Y) grid = { v, X, Y, lon0, lat0, res };
-          status.seen.radarGrid = { n: v.length, X, Y, lon0, lat0, res, max: v.reduce((m, x) => x < 100 && x > m ? x : m, -999) };
-        } else status.seen.radarGrid = "no content";
-      } catch (e) { fail("雷達格點", e); }
       const echo = (lat, lon, km) => {
         if (!grid) return null;
         const { v, X, Y, lon0, lat0, res } = grid, dLat = km / 111, dLon = km / (111 * Math.cos(lat * Math.PI / 180));
         let m = -99;
         for (let y = Math.max(0, Math.floor((lat - dLat - lat0) / res)); y <= Math.min(Y - 1, Math.ceil((lat + dLat - lat0) / res)); y++)
           for (let x = Math.max(0, Math.floor((lon - dLon - lon0) / res)); x <= Math.min(X - 1, Math.ceil((lon + dLon - lon0) / res)); x++) {
-            const val = v[y * X + x]; if (val > m && val < 100) m = val;
+            const val = v[(grid.flip ? Y - 1 - y : y) * X + x]; if (val > m && val < 100) m = val;
           }
         return m;
       };
