@@ -206,7 +206,8 @@ svg.ic .wet { stroke: var(--rain); }
 .wchart span { position: absolute; transform: translateX(-50%); font-weight: 600; line-height: 1; }
 .wchart span.hi { color: var(--bad); }
 .wchart span.lo { color: var(--rain); }
-.sm { font-size: 14px; }
+.sm { font-size: 16px; }
+.wdate { font-family: var(--display); font-weight: 600; font-size: 18px; letter-spacing: -0.02em; white-space: nowrap; color: var(--muted); line-height: 1.1; }
 
 /* 分頁：首頁、天氣詳細、空氣詳細 */
 main:not([data-view="home"]) .v-home, main:not([data-view="air"]) .v-air,
@@ -841,7 +842,7 @@ function renderMore(d) {
   };
   const hp = w.map((v, i) => [x(i), y(v.hi)]), lp = w.map((v, i) => [x(i), y(v.lo)]);
   $("w-top").innerHTML = w.map((v, i) =>
-    `<div class="cell${i ? "" : " first"}"><span>${v.label}</span><span class="muted sm">${v.date}</span>${icon(v.code, true)}` +
+    `<div class="cell${i ? "" : " first"}"><span>${v.label}</span><span class="wdate">${v.date}</span>${icon(v.code, true)}` +
     `<span class="${v.prob >= 50 ? "wetpct" : "muted"}">${v.prob == null ? "—" : v.prob + "%"}</span></div>`).join("");
   $("w-chart").innerHTML =
     `<svg viewBox="0 0 100 ${H}" preserveAspectRatio="none" aria-hidden="true">` +
