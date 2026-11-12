@@ -30,7 +30,10 @@ async function vapid(env) {
   return v;
 }
 const all = async env => (await env.SUBS.get("all", "json")) || {};
-const authed = (req, env) => env.API_TOKEN && req.headers.get("Authorization") === "Bearer " + env.API_TOKEN;
+const authed = (req, env) => {
+  const t = String(env.API_TOKEN || "").trim(), h = String(req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+  return t.length >= 16 && h === t;
+};
 
 function cleanPlaces(list) {
   if (!Array.isArray(list)) return null;
