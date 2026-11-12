@@ -432,7 +432,7 @@ main { touch-action: pan-y; }
 .pchart path.area { fill: var(--cloth); stroke: none; opacity: .75; }
 .pchart polyline { stroke: var(--ink); stroke-width: 2; }
 .pchart span { position: absolute; font-weight: 600; line-height: 1; white-space: nowrap; }
-.chart.pchart { touch-action: pan-y; cursor: crosshair; user-select: none; -webkit-user-select: none; }
+.chart.pchart { touch-action: pan-y; -webkit-touch-callout: none; cursor: crosshair; user-select: none; -webkit-user-select: none; }
 .pfix { position: absolute; inset: 0; pointer-events: none; }
 .pfix span, .pfix i { transition: opacity .15s; }
 .pfix.dim span { opacity: 0; } .pfix.dim i { opacity: .3; }
@@ -1204,14 +1204,22 @@ function renderMore(d) {
     $("past-bars").querySelectorAll("i").forEach((b, j) => b.classList.toggle("on", j === k));
   };
   const hide = () => { on = false; dir = null; const sc = el.querySelector(".pscrub"); if (sc) sc.hidden = true; const f = el.querySelector(".pfix"); if (f) f.classList.remove("dim"); $("past-bars").querySelectorAll("i.on").forEach(b => b.classList.remove("on")); };
-  el.addEventListener("pointerdown", e => { on = true; dir = e.pointerType === "mouse" ? "x" : null; sx = e.clientX; sy = e.clientY; if (dir) show(e); });
-  el.addEventListener("pointermove", e => {
-    if (!on && e.pointerType === "mouse") { show(e); return; }
+  // 手機：一碰到就顯示，往左右拖就跟著走；明顯往上下才讓給頁面捲動
+  el.addEventListener("touchstart", e => {
+    if (e.touches.length !== 1) return;
+    clearTimeout(lt); on = true; dir = null; sx = e.touches[0].clientX; sy = e.touches[0].clientY; show(e.touches[0]);
+  }, { passive: true });
+  el.addEventListener("touchmove", e => {
     if (!on) return;
-    if (!dir) { const dx = Math.abs(e.clientX - sx), dy = Math.abs(e.clientY - sy); if (dx < 6 && dy < 6) return; dir = dx > dy ? "x" : "y"; if (dir === "y") { on = false; return; } try { el.setPointerCapture(e.pointerId); } catch (x) {} }
-    if (dir === "x") { e.preventDefault(); show(e); }
-  });
-  el.addEventListener("pointerup", hide); el.addEventListener("pointercancel", hide); el.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") hide(); });
+    const t = e.touches[0];
+    if (!dir) { const dx = Math.abs(t.clientX - sx), dy = Math.abs(t.clientY - sy); if (dx < 3 && dy < 3) return; dir = dy > dx * 1.8 && dy > 8 ? "y" : "x"; }
+    if (dir === "y") { hide(); return; }
+    e.preventDefault(); show(t);
+  }, { passive: false });
+  let lt = null;
+  el.addEventListener("touchend", () => { on = false; clearTimeout(lt); lt = setTimeout(hide, 1500); }); el.addEventListener("touchcancel", hide);
+  // 電腦：滑鼠移過去就顯示
+  el.addEventListener("mousemove", show); el.addEventListener("mouseleave", hide);
 })();
 
 /* ---------- 資料 ---------- */
