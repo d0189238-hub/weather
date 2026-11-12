@@ -72,16 +72,18 @@ function timeline(loc, tag) {
 }
 function hourly(loc) {
   const now = Date.now();
-  let pop = null, wc = null, wx = null;
+  let pop = null, wc = null, wx = null, rh = null, ws = null;
   const rows = [];
   for (const [t, v] of timeline(loc, "3day")) {
     const p = ci(v, "ProbabilityOfPrecipitation"); if (p !== undefined && num(p) !== null) pop = num(p);
     const c = ci(v, "WeatherCode"); if (c !== undefined) { wc = String(c); wx = ci(v, "Weather") || wx; }
+    const r1 = num(ci(v, "RelativeHumidity")); if (r1 !== null) rh = r1;
+    const w1 = num(ci(v, "WindSpeed")); if (w1 !== null) ws = w1;
     const temp = num(ci(v, "Temperature"));
     if (temp === null) continue;
     const ms = Date.parse(t);
     if (ms < now - 4 * 3600e3 || ms > now + 76 * 3600e3) continue;
-    rows.push([t, temp, num(ci(v, "ApparentTemperature")), pop, wc, wx]);
+    rows.push([t, temp, num(ci(v, "ApparentTemperature")), pop, wc, wx, rh, ws]);
   }
   // 開頭幾筆如果還沒遇到降雨機率或天氣現象，往後借第一筆有值的
   const firstPop = rows.find(r => r[3] !== null), firstWx = rows.find(r => r[4] !== null);
@@ -143,6 +145,23 @@ function nearest(list, lat, lon, county, town) {
 async function main() {
   await mkdir(OUT, { recursive: true });
   const towns = {};
+  // 歷史：從上一版網站讀回來，再接上這次的觀測（每小時一筆，留 26 小时）
+  const site = process.env.SITE_URL || (process.env.GITHUB_REPOSITORY ? "https://" + process.env.GITHUB_REPOSITORY.split("/")[0].toLowerCase() + ".github.io/" + process.env.GITHUB_REPOSITORY.split("/")[1] + "/" : "");
+  let hist = {};
+  if (site) {
+    try {
+      const r = await fetch(site + "data/hist.json?t=" + Date.now(), { signal: AbortSignal.timeout(30000), cache: "no-store" });
+      if (r.ok) hist = await r.json(); else if (r.status !== 404) throw new Error("HTTP " + r.status);
+      status.seen.histTowns = Object.keys(hist).length;
+    } catch (e) { fail("讀取歷史", e); }
+  }
+  const nowHour = Math.floor(Date.now() / 3600e3);
+  const addHist = (key, temp, rain, aqi) => {
+    const list = (hist[key] || []).filter(x => x[0] > nowHour - 26 && x[0] !== nowHour);
+    list.push([nowHour, temp, rain, aqi]);
+    hist[key] = list;
+    return list;
+  };
   if (!CWA) { fail("設定", "沒有 CWA_KEY，請到專案 Settings → Secrets and variables → Actions 新增"); }
 
   // 觀測
@@ -181,8 +200,9 @@ async function main() {
         const f = hourly(loc), w = weekBy.has(town) ? daily(weekBy.get(town)) : [];
         if (!town || !f.length) continue;
         const o = nearest(obs, lat, lon, name, town), q = nearest(air, lat, lon, name, null);
+        const h = addHist(name + "|" + town, o ? o.temp : null, o ? o.rain : null, q ? q.aqi : null);
         out[town] = {
-          lat, lon, f, w,
+          lat, lon, f, w, h,
           o: o && { station: o.station, time: o.time, temp: o.temp, rh: o.rh, rain: o.rain, ws: o.ws, wd: o.wd, km: o.km },
           a: q && { site: q.site, time: q.time, aqi: q.aqi, status: q.status, pm25: q.pm25, pm10: q.pm10, o3: q.o3, no2: q.no2, so2: q.so2, co: q.co, km: q.km }
         };
@@ -281,6 +301,35 @@ async function main() {
     }));
   }
 
+
+  await writeFile(OUT + "/hist.json", JSON.stringify(hist));
+
+  // 天氣警特報（各縣市）
+  const warn = {};
+  if (CWA) {
+    try {
+      const j = await getJSON(cwaUrl("W-C0033-001"));
+      const walk = o => {
+        if (Array.isArray(o)) { o.forEach(walk); return; }
+        if (!o || typeof o !== "object") return;
+        const name = ci(o, "locationName"), hc = ci(o, "hazardConditions");
+        if (name && hc !== undefined) {
+          const list = arr(ci(hc, "hazards")).map(z => {
+            const info = ci(z, "info") || {}, vt = ci(z, "validTime") || {};
+            const ph = ci(info, "phenomena"), sig = ci(info, "significance");
+            return ph ? { name: ph + (sig || ""), start: ci(vt, "startTime") || null, end: ci(vt, "endTime") || null } : null;
+          }).filter(Boolean);
+          if (list.length) warn[name] = list;
+          status.seen.warnLocations = (status.seen.warnLocations || 0) + 1;
+          return;
+        }
+        for (const k in o) walk(o[k]);
+      };
+      walk(j);
+      if (!status.seen.warnLocations) status.seen.warnKeys = Object.keys(ci(j, "records") || j).slice(0, 10);
+    } catch (e) { fail("警特報", e); }
+  }
+  await writeFile(OUT + "/warn.json", JSON.stringify({ time: new Date().toISOString(), warn }));
 
   status.totalTowns = Object.values(status.counties).reduce((a, b) => a + b, 0);
   status.finished = new Date().toISOString();

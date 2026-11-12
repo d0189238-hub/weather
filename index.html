@@ -153,11 +153,32 @@ svg.ic .wet { stroke: var(--rain); }
 
 /* 現在 */
 .hero { padding-top: 8px; }
+.laundry { padding-top: 4px; }
+.ld { display: grid; grid-template-columns: 56px 1fr; gap: 14px; align-items: start; }
+.ld-ic svg.gi { width: 56px; height: 56px; }
+.ld-t { display: flex; flex-direction: column; gap: 2px; }
+.ld-k { color: var(--muted); font-size: 16px; font-weight: 600; letter-spacing: .08em; }
+.ld-t b { font-size: var(--t1); font-weight: 700; line-height: 1.25; }
+.ld-t b em { font-style: normal; font-family: var(--display); font-weight: 600; font-size: 32px; }
+#ld-sub { color: var(--muted); }
+.ld-bar { display: flex; gap: 2px; height: 10px; margin-top: 4px; }
+.ld-bar i { flex: 1; border-radius: 2px; background: var(--line); }
+.ld-bar i.ok { background: var(--marker); }
+.ld-bar i.so { background: color-mix(in srgb, var(--marker) 40%, var(--line)); }
+.ld-bar i.wet { background: var(--rain); opacity: .7; }
+.ld-ax { position: relative; height: 20px; font-family: var(--display); font-weight: 600; font-size: 16px; color: var(--muted); }
+.ld-ax span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.warn { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; margin-bottom: 4px; border-radius: 8px; background: color-mix(in srgb, var(--bad) 16%, var(--paper)); border-left: 5px solid var(--bad); }
+.warn b { font-size: 20px; font-weight: 700; color: var(--bad); }
+.warn span { font-size: 16px; color: var(--ink); }
 .hero-row { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--s2); }
 .hero-main { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; min-width: 0; }
 .hero-main b { font-family: var(--display); font-weight: 300; font-size: min(150px, 38vw); line-height: .78; letter-spacing: -0.03em; white-space: nowrap; }
 .hero-feels { color: var(--muted); white-space: nowrap; padding-left: 6px; }
-.hero-feels span { font-family: var(--display); font-weight: 600; font-size: 22px; color: var(--ink); }
+.hero-feels #feels { font-family: var(--display); font-weight: 600; font-size: 22px; color: var(--ink); }
+#vsy b { font-family: var(--display); font-weight: 600; font-size: 22px; }
+#vsy.cold b { color: var(--rain); }
+#vsy.warm b { color: var(--bad); }
 .hero-side { display: grid; gap: 2px; padding-bottom: 38px; }
 .hero-side div { display: grid; grid-template-columns: 34px auto; align-items: baseline; justify-items: end; }
 .hs-k { color: var(--muted); font-size: 16px; justify-self: start; }
@@ -369,6 +390,7 @@ main { touch-action: pan-y; }
     <span id="updated"></span>
   </div>
   <div class="dots" id="dots" role="tablist" aria-label="我的地點" hidden></div>
+  <div class="warn v-home" id="warn" role="alert" hidden></div>
   <div class="top v-sub">
     <button type="button" class="btn ghost" id="back">‹ 返回</button>
     <strong id="sub-title"></strong>
@@ -380,7 +402,7 @@ main { touch-action: pan-y; }
       <div class="hero-row">
         <div class="hero-main">
           <b id="now"></b>
-          <span class="hero-feels">體感 <span id="feels"></span></span>
+          <span class="hero-feels">體感 <span id="feels"></span><span id="vsy"></span></span>
         </div>
         <div class="hero-side">
           <div><span class="hs-k" aria-label="今天最高">↑</span><span class="hs-v hi" id="hi"></span></div>
@@ -391,6 +413,19 @@ main { touch-action: pan-y; }
       <div class="hero-desc"><span id="icon"></span><span id="desc"></span><span class="sep">・</span><span id="pop"></span></div>
       <span class="chev">天氣詳細<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     </div>
+  </section>
+
+  <section class="v-home laundry" id="laundry">
+    <div class="ld">
+      <span class="ld-ic" id="ld-ic"></span>
+      <div class="ld-t">
+        <span class="ld-k" id="ld-k"></span>
+        <b id="ld-main"></b>
+        <span id="ld-sub"></span>
+      </div>
+    </div>
+    <div class="ld-bar" id="ld-bar" aria-hidden="true"></div>
+    <div class="ld-ax" id="ld-ax" aria-hidden="true"></div>
   </section>
 
   <section class="v-home">
@@ -724,6 +759,64 @@ function periods(hours) {
 /* ---------- 畫面 ---------- */
 let current = null, tab = 0;
 
+/* 曬衣時段：白天、降雨機率低、濕度不太高、連續 3 小時以上 */
+const dryGood = x => x.prob <= 20 && (x.rh == null || x.rh <= 80);
+const drySoso = x => x.prob <= 30 && (x.rh == null || x.rh <= 88);
+function dryPlan(hours, nowMin, sun) {
+  const rise = Math.ceil((parseInt(sun.rise) * 60 + Number(sun.rise.slice(3))) / 60), set = parseInt(sun.set);
+  const from = Math.max(rise, 7), to = Math.min(set, 17);
+  const dayHours = off => hours.filter(x => x.day === off && x.h >= from && x.h < to);
+  const best = list => {
+    let b = null, cur = null;
+    list.forEach((x, i) => {
+      if (dryGood(x) && cur && list[i - 1].h === x.h - 1) cur.end = x.h + 1;
+      else if (dryGood(x)) cur = { start: x.h, end: x.h + 1 };
+      else cur = null;
+      if (cur && (!b || cur.end - cur.start > b.end - b.start)) b = { ...cur };
+    });
+    return b && b.end - b.start >= 3 ? b : null;
+  };
+  const why = list => {
+    if (!list.length) return "";
+    const p = Math.max(...list.map(x => x.prob)), r = Math.max(...list.map(x => x.rh || 0));
+    return p > 20 ? `降雨機率最高 ${p}%` : r > 80 ? `濕度約 ${r}%，不容易乾` : "好天氣的時間不夠長";
+  };
+  const speed = (list, w) => {
+    const seg = list.filter(x => x.h >= w.start && x.h < w.end);
+    const rh = seg.reduce((a, x) => a + (x.rh == null ? 70 : x.rh), 0) / seg.length, ws = seg.reduce((a, x) => a + (x.ws == null ? 1 : x.ws), 0) / seg.length;
+    return rh <= 65 && ws >= 2 ? "濕度低又有風，乾得快" : rh >= 75 ? `濕度約 ${Math.round(rh)}%，乾得比較慢` : "";
+  };
+  const today = dayHours(0), w0 = best(today), tomorrow = dayHours(1), w1 = best(tomorrow);
+  const late = nowMin >= (to - 2) * 60;
+  const res = { key: "今天", bar: today.length >= 3 && !late ? today : tomorrow, barDay: today.length >= 3 && !late ? 0 : 1 };
+  if (w0) {
+    const after = today.find(x => x.h >= w0.end && x.prob >= 40);
+    res.ok = true;
+    res.main = `適合曬，<em>${w0.start}</em> 點到 <em>${w0.end}</em> 點`;
+    res.sub = [after ? `${after.h} 點後降雨機率 ${after.prob}%，${w0.end} 點前收` : `${w0.end} 點前收，免得返潮`, speed(today, w0)].filter(Boolean).join("；");
+  } else {
+    res.ok = false;
+    res.main = late ? "今天來不及曬了" : "今天不適合曬";
+    res.sub = [late ? "" : why(today), w1 ? `明天 ${w1.start} 點到 ${w1.end} 點可以曬` : tomorrow.length ? "明天也不太適合，建議室內晾乾、開除濕機" : ""].filter(Boolean).join("；");
+  }
+  return res;
+}
+function renderLaundry(d) {
+  const r = dryPlan(d.hours, d.nowMin, d.sun);
+  $("ld-ic").innerHTML = gi("laundry");
+  $("ld-k").textContent = "曬衣服";
+  $("ld-main").innerHTML = r.main;
+  $("ld-sub").textContent = r.sub;
+  const bar = r.bar || [];
+  $("ld-bar").hidden = $("ld-ax").hidden = bar.length < 3;
+  if (bar.length >= 3) {
+    $("ld-bar").innerHTML = bar.map(x => `<i class="${dryGood(x) ? "ok" : drySoso(x) ? "so" : x.prob >= 40 ? "wet" : ""}"></i>`).join("");
+    const n = bar.length, pos = k => (k / n * 100) + "%";
+    $("ld-ax").innerHTML = `<span style="left:0;transform:none">${r.barDay ? "明天 " : ""}${bar[0].h} 點</span>` +
+      `<span style="left:${pos(Math.round(n / 2))}">${bar[Math.round(n / 2)].h}</span>` +
+      `<span style="left:100%;transform:translateX(-100%)">${bar[n - 1].h + 1} 點</span>`;
+  }
+}
 function renderTips() {
   const ps = periods(current.hours);
   if (tab >= ps.length) tab = 0;
@@ -787,6 +880,14 @@ function render(d) {
   $("hi").textContent = Math.round(d.hi) + "°"; $("lo").textContent = Math.round(d.lo) + "°";
   $("uvh").textContent = c.uv == null ? "—" : Math.round(c.uv);
   $("pop").textContent = "降雨 " + (d.hours[0] ? d.hours[0].prob : 0) + "%";
+  const vy = $("vsy");
+  if (d.yday == null) { vy.textContent = ""; vy.className = ""; }
+  else {
+    const df = Math.round(c.temp - d.yday);
+    vy.className = df <= -1 ? "cold" : df >= 1 ? "warm" : "";
+    vy.innerHTML = df <= -1 ? `・比昨天冷 <b>${-df}°</b>` : df >= 1 ? `・比昨天暖 <b>${df}°</b>` : "・跟昨天差不多";
+  }
+  renderLaundry(d);
   setWx(c);
   $("precip").textContent = c.precip + " mm";
   $("hum").textContent = c.hum == null ? "—" : Math.round(c.hum) + "%";
@@ -813,12 +914,12 @@ function render(d) {
     $("poll").innerHTML = items.filter(x => x[1] != null).map(x =>
       `<div><span class="muted">${x[0]}</span><b>${Number(x[1]).toFixed(x[3])}</b><span class="muted sm">${x[2]}</span></div>`).join("");
     const hist = d.aq.hist || [];
-    $("hist").hidden = !hist.length;
-    if (hist.length) {
+    $("hist").hidden = hist.length < 3;
+    if (hist.length >= 3) {
       const vs = hist.map(x => x.v), top = Math.max(...vs, 50);
       $("aq-range").textContent = `AQI ${Math.min(...vs)} ~ ${Math.max(...vs)}`;
       $("aq-bars").innerHTML = hist.map(x => `<i style="--c:${aqiLevel(x.v).color};height:${x.v / top * 100}%"></i>`).join("");
-      $("aq-from").textContent = "昨天 " + hist[0].h + "時";
+      $("aq-from").textContent = (hist[0].yd === false ? "" : "昨天 ") + hist[0].h + "時";
     }
   } else {
     $("poll").textContent = ""; $("hist").hidden = true;
@@ -863,8 +964,8 @@ function renderMore(d) {
   $("sunpos").hidden = pos < 0 || pos > 1;
   $("sunpos").style.left = pos * 100 + "%";
 
-  $("past-sec").hidden = d.past.length < 2;
-  if (d.past.length < 2) return;
+  $("past-sec").hidden = d.past.length < 3;
+  if (d.past.length < 3) return;
   const ps = d.past, ts = ps.map(v => v.temp), lo = Math.min(...ts), hi = Math.max(...ts), m = ps.length, PH = 124;
   const px = k => k / (m - 1) * 100, py = t => 32 + (1 - (t - lo) / ((hi - lo) || 1)) * (PH - 66);
   const pts = ps.map((v, k) => px(k) + "," + py(v.temp)).join(" ");
@@ -877,12 +978,13 @@ function renderMore(d) {
   $("past-chart").innerHTML =
     `<svg viewBox="0 0 100 ${PH}" preserveAspectRatio="none" aria-hidden="true"><path class="area" d="M0 ${PH} L${pts.replace(/ /g, " L")} L100 ${PH} Z"/><polyline points="${pts}"/></svg>` +
     tag(ts.indexOf(hi), true) + tag(ts.indexOf(lo), false);
-  $("past-axis").innerHTML = [0, 6, 12, 18, m - 1].map(k =>
-    `<span>${k === m - 1 ? "現在" : (k === 0 ? "昨天 " : "") + ps[k].h + "時"}</span>`).join("");
+  const ticks = [...new Set([0, Math.round((m - 1) / 4), Math.round((m - 1) / 2), Math.round((m - 1) * 3 / 4), m - 1])];
+  $("past-axis").innerHTML = ticks.map(k =>
+    `<span>${k === m - 1 ? "現在" : (ps[k].yd ? "昨天 " : "") + ps[k].h + "時"}</span>`).join("");
   const rs = ps.map(x => x.rain), top = Math.max(...rs, 1);
   $("past-r").textContent = `累積雨量 ${rs.reduce((a, b) => a + b, 0).toFixed(1)} mm`;
   $("past-bars").innerHTML = rs.map(v => `<i style="height:${v / top * 100}%"></i>`).join("");
-  $("past-from").textContent = "昨天 " + ps[0].h + "時";
+  $("past-from").textContent = (ps[0].yd === false ? "" : "昨天 ") + ps[0].h + "時";
 }
 
 /* ---------- 資料 ---------- */
@@ -973,10 +1075,22 @@ function fromData(T, D) {
   rows.forEach((x, i) => { if (x.ms <= nowMs) start = i; });
   const hours = rows.slice(start, start + 48).map(x => {
     const h = new Date(x.ms + 8 * 3600e3).getUTCHours(), day = twDay(x.ms) - today, isDay = isDayAt(h);
-    return { day, h, isDay, temp: x.r[1], feels: x.r[2] == null ? x.r[1] : x.r[2], prob: x.r[3] == null ? 0 : x.r[3], code: wxCode(x.r[4]), text: x.r[5], uv: isDay ? uvOf(day + today) : 0 };
+    return { day, h, isDay, temp: x.r[1], feels: x.r[2] == null ? x.r[1] : x.r[2], prob: x.r[3] == null ? 0 : x.r[3], code: wxCode(x.r[4]), text: x.r[5], uv: isDay ? uvOf(day + today) : 0, rh: x.r[6], ws: x.r[7] };
   });
   if (!hours.length || !week.length) throw new Error("no forecast");
   const h0 = hours[0], o = T.o, a = T.a, nowDay = nowMin >= sun.rise && nowMin < sun.set;
+  // 過去 24 小時（每小時一筆，由排程累積）
+  const nowH = Math.floor(nowMs / 3600e3), H = (T.h || []).filter(x => x[0] > nowH - 25).sort((p, q) => p[0] - q[0]);
+  const hourOf = k => new Date(k * 3600e3 + 8 * 3600e3).getUTCHours(), yday = k => twDay(k * 3600e3) < today;
+  const past = [];
+  H.forEach((x, i) => {
+    if (x[1] == null) return;
+    const prev = i ? H[i - 1][2] : null;
+    const rain = x[2] == null ? 0 : prev == null || x[2] < prev ? (i ? x[2] : 0) : x[2] - prev;
+    past.push({ k: x[0], h: hourOf(x[0]), yd: yday(x[0]), temp: x[1], rain: Math.max(0, rain) });
+  });
+  const aqHist = H.filter(x => x[3] != null).map(x => ({ k: x[0], h: hourOf(x[0]), yd: yday(x[0]), v: Math.round(x[3]) }));
+  const y24 = (T.h || []).filter(x => x[1] != null && Math.abs(x[0] - (nowH - 24)) <= 1).sort((p, q) => Math.abs(p[0] - nowH + 24) - Math.abs(q[0] - nowH + 24))[0];
   return {
     sample: false,
     time: (D.updated || (o && o.time) || "").slice(11, 16),
@@ -985,16 +1099,16 @@ function fromData(T, D) {
       temp: o && o.temp != null ? o.temp : h0.temp, feels: h0.feels, hum: o ? o.rh : null, precip: o && o.rain != null ? o.rain : 0,
       wind: o ? o.ws : null, wdir: o ? o.wd : null, code: h0.code, desc: h0.text, isDay: nowDay, uv: nowDay ? uvOf(today) : 0
     },
-    hi: week[0].hi, lo: week[0].lo, week, hours, past: [],
+    hi: week[0].hi, lo: week[0].lo, week, hours, past, yday: y24 ? y24[1] : null,
     sun: { rise: hhmm(sun.rise), set: hhmm(sun.set) }, nowMin,
-    aq: a && a.aqi != null ? { aqi: a.aqi, pm: a.pm25, pm10: a.pm10, o3: a.o3, no2: a.no2, so2: a.so2, co: a.co, hist: [] } : null
+    aq: a && a.aqi != null ? { aqi: a.aqi, pm: a.pm25, pm10: a.pm10, o3: a.o3, no2: a.no2, so2: a.so2, co: a.co, hist: aqHist } : null
   };
 }
 
 /* ---------- 地點 ---------- */
 const pname = p => p.c + p.t;
 const seedOf = s => [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7);
-let OB = null, satKind = "ir", rankKind = "hi", here = null;
+let WARN = null, OB = null, satKind = "ir", rankKind = "hi", here = null;
 let places = [{ c: "臺北市", t: "中正區" }], active = 0, editing = false, liveOK = false;
 try {
   const saved = JSON.parse(store.get("places") || "null");
@@ -1011,6 +1125,7 @@ async function load() {
   here = { lat: c.lat, lon: c.lon }; if (OB) drawObs();
   $("place-name").textContent = pname(p);
   renderDots();
+  if (WARN) drawWarn();
   if ($("app").dataset.view !== "home") $("sub-title").textContent = pname(p) + "・" + VIEWS[$("app").dataset.view];
   tab = 0;
   render(sample(c.lat, seedOf(pname(p))));            // 先有畫面
@@ -1192,6 +1307,20 @@ $("a-ok").addEventListener("click", () => {
 load();
 setView(location.hash.slice(1));
 
+/* ---------- 天氣警特報 ---------- */
+function drawWarn() {
+  const el = $("warn"), p = places[active];
+  const list = WARN && p ? (WARN[p.c] || WARN[p.c.replace("臺", "台")] || []) : [];
+  el.hidden = !list.length;
+  if (!list.length) return;
+  const end = v => { const t = twTime(v); return t ? "到 " + t : ""; };
+  el.innerHTML = `<b>⚠ ${[...new Set(list.map(x => x.name))].join("、")}</b>` +
+    list.map(x => `<span>${x.name}${end(x.end) ? "，" + end(x.end) : ""}（${p.c}）</span>`).join("");
+}
+async function loadWarn() {
+  try { const r = await fetch("data/warn.json", { cache: "no-cache" }); if (r.ok) { WARN = (await r.json()).warn || {}; drawWarn(); } } catch (e) {}
+}
+
 /* ---------- 觀測圖 ---------- */
 
 const twTime = v => {
@@ -1337,6 +1466,7 @@ async function loadObs() {
   drawObs();
 }
 loadObs();
+loadWarn();
 
 /* 網站有新版本就自動換新（避免手機一直用舊的頁面） */
 const BUILD = "__BUILD__";
@@ -1367,6 +1497,7 @@ async function refresh() {
     if (T && places[active] === p) render(fromData(T, D));
   } catch (e) {}
   loadObs();
+  loadWarn();
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 setInterval(() => { if (!document.hidden) refresh(); }, 5 * 60e3);
