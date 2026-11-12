@@ -346,6 +346,14 @@ main { touch-action: pan-y; }
 .sm-me { margin: 4px 0 0; font-size: 16px; }
 .sm-me em { font-style: normal; font-family: var(--display); font-size: 22px; font-weight: 600; }
 .smf[data-img] { cursor: zoom-in; }
+.smf figcaption.rng { font-size: 14px; padding: 2px 9px; }
+.sm-isl .mine { font-size: 14px; color: var(--ink); }
+#sm-legend .qbar { display: flex; width: 100%; gap: 0; }
+#sm-legend .qbar span { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; font-size: 12px; color: var(--muted); }
+#sm-legend .qbar i { width: 100%; height: 9px; border-radius: 0; margin: 0; }
+#sm-legend .qbar span:first-child i { border-radius: 5px 0 0 5px; } #sm-legend .qbar span:last-child i { border-radius: 0 5px 5px 0; }
+#sm-legend .qwords { display: grid; grid-template-columns: 4fr 1fr 2fr 2fr; width: 100%; font-size: 12px; color: var(--muted); }
+#sm-legend .qwords span { border-left: 1px solid var(--line); padding-left: 4px; }
 .eqbar { display: flex; align-items: center; gap: 10px; width: 100%; font: inherit; font-size: 16px; text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
 .eqbar[hidden] { display: none; }
 .eqbar .tag { flex: none; font-size: 13px; font-weight: 700; color: #fff; background: #e0412b; border-radius: 10px; padding: 2px 8px; }
@@ -2226,8 +2234,10 @@ async function loadSmall() {
 }
 /* 雨量預報：氣象署每 12 小時累積雨量（毫米），色階 index 1..17 對應 0.5、1、2、5、10、15、20、30、40、50、70、90、110、130、150、200、300 */
 const QPF_LO = [0, 0.5, 1, 2, 5, 10, 15, 20, 30, 40, 50, 70, 90, 110, 130, 150, 200, 300], QPF_HI = [0.5, 1, 2, 5, 10, 15, 20, 30, 40, 50, 70, 90, 110, 130, 150, 200, 300, 400];
-const QPF_SHOW = [[0.5, "#cfe6f7"], [2, "#93c7ee"], [5, "#4f9fe2"], [10, "#2370c8"], [20, "#1d469c"], [40, "#5a2b9c"], [70, "#a3207a"], [130, "#d81b60"]];
-const qpfCol = c => { if (!c) return null; const mm = QPF_LO[c]; let col = null; for (const [v, k] of QPF_SHOW) if (mm >= v) col = k; return col; };
+// 跟氣象署雨量圖同一套直覺：藍＝小雨，綠黃＝明顯的雨，橘紅紫＝大雨
+const QPF_SHOW = [[0.5, [170, 228, 255]], [2, [70, 190, 255]], [5, [30, 135, 255]], [10, [25, 85, 225]], [20, [40, 190, 80]], [40, [255, 210, 0]], [70, [255, 125, 0]], [130, [225, 35, 30]], [200, [180, 20, 170]]];
+const qpfRGB = c => { if (!c) return null; const mm = QPF_LO[c]; let col = null; for (const [v, k] of QPF_SHOW) if (mm >= v) col = k; return col; };
+const qpfCol = c => { const k = qpfRGB(c); return k ? `rgb(${k})` : null; };
 const qpfAt = (q, p, lat, lon) => { const gx = Math.floor((lon - q.lon0) / q.res), gy = Math.floor((lat - q.lat0) / q.res); if (gx < 0 || gy < 0 || gx >= q.X || gy >= q.Y) return null; let m = 0; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const y = gy + a, x = gx + b; if (x >= 0 && y >= 0 && x < q.X && y < q.Y) m = Math.max(m, p.cells[y * q.X + x]); } return m; };
 const twH = ms => { const t = new Date(ms + 8 * 3600e3), h = t.getUTCHours(), d = Math.round((Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) - Math.floor((Date.now() + 8 * 3600e3) / 864e5) * 864e5) / 864e5);
   const day = d === 0 ? (h >= 18 ? "今晚" : h < 12 ? "今早" : "今天") : d === 1 ? (h >= 18 ? "明晚" : h < 12 ? "明早" : "明天") : d === 2 ? (h >= 18 ? "後天晚上" : h < 12 ? "後天早上" : "後天") : (t.getUTCMonth() + 1) + "/" + t.getUTCDate();
@@ -2238,43 +2248,50 @@ function drawSmall() {
   if (smKind === "rain" && !Q) { smKind = "pop"; }
   const idx = Q ? Q.periods.map((p, i) => i).slice(0, 4) : [0, 2, 4, 6].filter(i => i < fc.times.length);
   $("sm-title").textContent = Q ? "未來 48 小時雨量" : "未來 24 小時";
-  $("sm-cap").textContent = Q ? "每張是 12 小時內預計的累積雨量（毫米），氣象署定量降水預報，點地圖看原圖。" : "每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。";
+  $("sm-cap").textContent = Q ? "每張是那 12 小時內預計會下的總雨量（毫米），白點是你選的地點。資料：氣象署定量降水預報，點地圖看原圖。" : "每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。";
   const lo0 = 119.95, lo1 = 122.05, la0 = 21.87, la1 = 25.33, k = Math.cos(23.6 * Math.PI / 180);
   const cw = Math.floor((box.clientWidth - 10) / 2) || 160, ch = Math.round(cw * (la1 - la0) / ((lo1 - lo0) * k));
   const dpr = Math.min(3, window.devicePixelRatio || 1), sx = cw / (lo1 - lo0), sy = ch / (la1 - la0);
   const P = ([x, y]) => [(x - lo0) * sx, (la1 - y) * sy];
   const path = (ctx, g) => { const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates; ctx.beginPath(); for (const poly of polys) for (const ring of poly) ring.forEach((p, i) => { const [x, y] = P(p); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); };
   const dark = document.documentElement.dataset.sky === "night";
-  box.innerHTML = idx.map((i, n) => `<figure class="smf"${Q ? ` data-img="data/${Q.periods[i].img}"` : ""}><figcaption>${Q ? twH(Date.parse(Q.periods[i].from)) + " 起" : fcLabel(i)}</figcaption><canvas width="${cw * dpr}" height="${ch * dpr}" style="width:${cw}px;height:${ch}px"></canvas><div class="sm-isl" data-n="${n}"></div></figure>`).join("");
+  box.innerHTML = idx.map((i, n) => `<figure class="smf"${Q ? ` data-img="data/${Q.periods[i].img}"` : ""}><figcaption${Q ? ' class="rng"' : ""}>${Q ? twH(Date.parse(Q.periods[i].from)) + " → " + twH(Date.parse(Q.periods[i].to)).replace(/^(今|明|後)天(早上|晚上)?\s?/, (m, a, b) => m) : fcLabel(i)}</figcaption><canvas width="${cw * dpr}" height="${ch * dpr}" style="width:${cw}px;height:${ch}px"></canvas><div class="sm-isl" data-n="${n}"></div></figure>`).join("");
+  const pl0 = places[active] ? pname(places[active]).replace(/^(.{2,3}[縣市])/, "") : "你這裡";
   box.querySelectorAll("canvas").forEach((cv, n) => {
     const ctx = cv.getContext("2d"), i = idx[n];
     ctx.scale(dpr, dpr);
     if (Q) {
-      // 先畫陸地底色，再把雨量格子剪在陸地裡
-      const P0 = Q.periods[i], cw0 = Q.res * sx + 0.6, ch0 = Q.res * sy + 0.6;
+      // 陸地底色 → 雨量（先畫成小圖再平滑放大，邊緣柔和、沒有格線）→ 縣市界 → 你的地點
+      const P0 = Q.periods[i];
       ctx.beginPath();
       for (const t of SM.towns) { const polys = t.geom.type === "Polygon" ? [t.geom.coordinates] : t.geom.coordinates; for (const poly of polys) for (const ring of poly) ring.forEach((p, j) => { const [x, y] = P(p); j ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); }
-      ctx.fillStyle = dark ? "#2a3340" : "#e9ecef"; ctx.fill("nonzero");
+      ctx.fillStyle = dark ? "#353f4c" : "#e6e9ec"; ctx.fill("nonzero");
       ctx.save(); ctx.clip("nonzero");
+      const off = document.createElement("canvas"); off.width = Q.X; off.height = Q.Y;
+      const oc = off.getContext("2d"), im = oc.createImageData(Q.X, Q.Y);
       for (let gy = 0; gy < Q.Y; gy++) for (let gx = 0; gx < Q.X; gx++) {
-        const col = qpfCol(P0.cells[gy * Q.X + gx]); if (!col) continue;
-        const [x, y] = P([Q.lon0 + gx * Q.res, Q.lat0 + (gy + 1) * Q.res]);
-        ctx.fillStyle = col; ctx.fillRect(x, y, cw0, ch0);
+        const rgb = qpfRGB(P0.cells[gy * Q.X + gx]); if (!rgb) continue;
+        const o = ((Q.Y - 1 - gy) * Q.X + gx) * 4; im.data[o] = rgb[0]; im.data[o + 1] = rgb[1]; im.data[o + 2] = rgb[2]; im.data[o + 3] = 235;
       }
+      oc.putImageData(im, 0, 0);
+      const [x0, y0] = P([Q.lon0, Q.lat0 + Q.Y * Q.res]), [x1, y1] = P([Q.lon0 + Q.X * Q.res, Q.lat0]);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(off, x0, y0, x1 - x0, y1 - y0);
       ctx.restore();
-      ctx.strokeStyle = dark ? "rgba(0,0,0,.22)" : "rgba(255,255,255,.6)"; ctx.lineWidth = 0.4;
-      for (const t of SM.towns) { path(ctx, t.geom); ctx.stroke(); }
     }
     else for (const t of SM.towns) {
       const v = fc.towns[t.key], col = smColor(v && v[i]);
       path(ctx, t.geom); ctx.fillStyle = col || (dark ? "#2a3340" : "#e9ecef"); ctx.fill("evenodd");
       ctx.strokeStyle = dark ? "rgba(0,0,0,.25)" : "rgba(255,255,255,.7)"; ctx.lineWidth = 0.4; ctx.stroke();
     }
-    ctx.strokeStyle = dark ? "rgba(255,255,255,.55)" : "rgba(40,50,60,.55)"; ctx.lineWidth = 0.8;
+    ctx.strokeStyle = Q ? (dark ? "rgba(255,255,255,.22)" : "rgba(40,50,60,.3)") : dark ? "rgba(255,255,255,.55)" : "rgba(40,50,60,.55)"; ctx.lineWidth = Q ? 0.6 : 0.8;
     for (const g of SM.counties) { path(ctx, g); ctx.stroke(); }
+    if (Q && here) { const [x, y] = P([here.lon, here.lat]); ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#111"; ctx.stroke(); }
     // 金門、馬祖不在圖內，用小圓點表示
     const isl = [["金門", "金門縣|金城鎮"], ["馬祖", "連江縣|南竿鄉"]].map(([nm, key]) => { const v = fc.towns[key], col = smColor(v && v[i]); return `<span><i style="background:${col || "transparent"}"></i>${nm}</span>`; }).join("");
-    box.querySelector(`.sm-isl[data-n="${n}"]`).innerHTML = Q ? "" : isl;
+    let mine = "";
+    if (Q && here) { const c = qpfAt(Q, Q.periods[i], here.lat, here.lon) || 0, rgb = qpfRGB(c); mine = `<span class="mine"><i style="background:${rgb ? `rgb(${rgb})` : "transparent"}"></i>${pl0}　${c ? (QPF_LO[c] < 1 ? "不到 " + QPF_HI[c] : QPF_LO[c] + "～" + QPF_HI[c]) + " 毫米" : "不會下雨"}</span>`; }
+    box.querySelector(`.sm-isl[data-n="${n}"]`).innerHTML = Q ? mine : isl;
   });
   // 你的地點：48 小時大約會下多少
   const me = $("sm-me"), pl = places[active];
@@ -2285,7 +2302,7 @@ function drawSmall() {
     const nm = pl ? pname(pl) : "你的地點";
     me.innerHTML = hi < 0.5 ? `<b>${nm}</b>　未來 48 小時預計不會下雨` : `<b>${nm}</b>　未來 48 小時預計累積 <em>${lo < 1 ? "不到 " + Math.ceil(hi) : Math.round(lo) + "～" + Math.round(hi)}</em> 毫米`;
   }
-  $("sm-legend").innerHTML = Q ? QPF_SHOW.map(([v, c], j) => `<span><i style="background:${c}"></i>${v}${j === QPF_SHOW.length - 1 ? "+" : ""}</span>`).join("") + `<span class="muted">毫米</span>` : smKind === "wx"
+  $("sm-legend").innerHTML = Q ? `<div class="qbar">${QPF_SHOW.map(([v, c]) => `<span><i style="background:rgb(${c})"></i>${v}</span>`).join("")}</div><div class="qwords"><span>小雨</span><span>中雨</span><span>大雨</span><span>豪雨</span></div>` : smKind === "wx"
     ? Object.entries(WXCOL).map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join("")
     : smKind === "pop" ? [[20, "20%"], [30, "30%"], [40, "40%"], [60, "60%"], [80, "80%+"]].map(([p, l]) => `<span><i style="background:${POPCOL(p)}"></i>${l}</span>`).join("")
     : [[5, "5°"], [10, "10°"], [15, "15°"], [20, "20°"], [25, "25°"], [30, "30°"], [35, "35°"]].map(([t, l]) => `<span><i style="background:${smTempCol(t)}"></i>${l}</span>`).join("");
