@@ -249,12 +249,10 @@ async function main() {
   await writeFile(OUT + "/maps.json", JSON.stringify(maps));
 
   // 閃電：過去 1 小時的閃電位置（KMZ 壓縮檔）
-  const light = { time: null, pts: [] };
+  const light = { time: null, pts: [], ok: false };
   if (CWA) {
     try {
-      const j = await fileapi("O-A0039-001"), u = findUrl(j, /^https?:\/\/\S+\.km[lz](\?\S*)?$/i);
-      if (!u) throw new Error("找不到閃電檔位址");
-      const r = await fetch(u, { signal: AbortSignal.timeout(60000) });
+      const r = await fetch("https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/O-A0039-001?Authorization=" + encodeURIComponent(CWA) + "&downloadType=WEB&format=KMZ", { signal: AbortSignal.timeout(60000) });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const buf = Buffer.from(await r.arrayBuffer()), tmp = OUT + "/tmp-light";
       let kml;
@@ -264,10 +262,11 @@ async function main() {
         const c = m[0].match(/<coordinates>\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)/i);
         if (c) light.pts.push([Number(c[1]), Number(c[2]), /對地|ground/i.test(m[0]) ? 1 : 0]);
       }
-      light.time = findKey(j, /^(datetime|obstime|date|sent)$/i) || new Date().toISOString();
+      light.time = new Date().toISOString(); light.ok = true;
       status.seen.lightning = light.pts.length;
-    } catch (e) { fail("閃電", e); }
+    } catch (e) { light.pts = null; fail("閃電", e); }
   }
+  if (!light.ok) light.pts = null;
   await writeFile(OUT + "/lightning.json", JSON.stringify(light));
 
   // 紫外線（綜觀站）與今日排行

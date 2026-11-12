@@ -1086,7 +1086,7 @@ function drawObs() {
     n = L.pts.length; g = L.pts.filter(p => p[2]).length;
     if (here) L.pts.forEach(p => { const d = kmTo(here.lat, here.lon, p[1], p[0]); if (near === null || d < near) near = d; });
   }
-  const lightText = !L ? "" : n === 0 ? "過去 1 小時沒有閃電" : `過去 1 小時閃電 ${n} 次` + (g ? `（打到地面 ${g} 次）` : "") + (near !== null ? `，離你最近 ${near < 10 ? near.toFixed(1) : Math.round(near)} 公里` : "");
+  const lightText = !L || !L.pts ? "" : n === 0 ? "過去 1 小時沒有閃電" : `過去 1 小時閃電 ${n} 次` + (g ? `（打到地面 ${g} 次）` : "") + (near !== null ? `，離你最近 ${near < 10 ? near.toFixed(1) : Math.round(near)} 公里` : "");
   if (M.radar) {
     setImg("radar", M.radar);
     $("radar-thumb").src = $("radar-img").src;
@@ -1101,7 +1101,7 @@ function drawObs() {
     $("radar-svg").innerHTML = svg;
     $("light-cap").textContent = lightText ? lightText + (n ? "。紅點是打到地面的閃電，黃點是雲裡的閃電" : "") + (here ? "，黑圈是你選的地點。" : "。") : "";
   }
-  $("light-home").textContent = lightText || "雷達回波";
+  $("light-home").textContent = lightText || "雷達回波與觀測圖";
   show("obs-home", !!(M.radar || M.ir || M.vis || M.rain || M.temp || O));
   // 衛星雲圖
   const names = { ir: "紅外線", vis: "可見光" }, have = Object.keys(names).filter(k => M[k]);
