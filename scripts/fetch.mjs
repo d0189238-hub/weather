@@ -915,7 +915,7 @@ async function main() {
         return { pl, dayRows, hiOf, catOf, t1, rainDay, rainNight: rainDay ? dayRows(rainDay).reduce((a, r) => a | (r[6] || 0), 0) === 2 : false, cold, hot, t1cat: t1 ? catOf(t1) : null };
       };
       const VERD = { wet: "有雨，宜室內晾衣", night: "晚間降雨，宜傍晚前收衣", maybe: "可能短暫降雨，宜提早收衣", dry: "全日宜曬衣" };
-      const rng = h => h[0] === h[1] ? h[1] : h[0] + "～" + h[1];
+      const rng = h => h[0] === h[1] ? h[1] : h[0] + "–" + h[1];
       const noteTexts = (F, max) => {
         const notes = [];
         if (F.rainDay) notes.push({ d: F.rainDay, t: `${dayName(F.rainDay, ahead(F.rainDay))}${F.rainNight ? "晚間" : ""}降雨` });
