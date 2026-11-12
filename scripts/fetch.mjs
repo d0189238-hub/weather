@@ -306,6 +306,7 @@ async function main() {
     const uniq = new Map(); obs.forEach(x => { if (!uniq.has(x.station)) uniq.set(x.station, x); });
     const all = [...uniq.values()], pick = x => [x.station, x.county || "", x.town || ""];
     const top = (key, dir, n = 5) => all.filter(x => x[key] !== null && x[key] > -50).sort((a, b) => dir * (b[key] - a[key])).slice(0, n).map(x => pick(x).concat(x[key]));
+    status.seen.extraTemps = all.filter(x => /斗六|埔里|梧棲/.test(x.station || "")).map(x => x.station + (x.syn ? "*" : "") + " " + x.temp);
     await writeFile(OUT + "/obs.json", JSON.stringify({
       time: (all.find(x => x.syn) || all[0]).time,
       uv: all.filter(x => x.syn && x.uv !== null && x.uv >= 0).map(x => pick(x).concat(x.uv, x.lat, x.lon)),
