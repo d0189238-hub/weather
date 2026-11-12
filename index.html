@@ -1401,7 +1401,7 @@ $("dots").addEventListener("click", e => {
   let x0 = 0, y0 = 0, dx = 0, mode = 0;                 // mode: 0 未定、1 橫向、2 直向
   m.addEventListener("touchstart", e => {
     mode = 2; dx = 0;
-    if (e.touches.length !== 1 || places.length < 2 || e.target.closest(".hscroll, .lmap")) return;
+    if (e.touches.length !== 1 || places.length < 2 || e.target.closest(".hscroll, .lmap, .pchart, .ty-lmap")) return;
     x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
     if (x0 < 24 || x0 > window.innerWidth - 24) return;  // 留給瀏覽器的邊緣手勢
     mode = 0; m.style.transition = "none";
