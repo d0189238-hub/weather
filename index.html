@@ -177,7 +177,7 @@ svg.ic .wet { stroke: var(--rain); }
 
 /* 分頁：首頁、天氣詳細、空氣詳細 */
 main:not([data-view="home"]) .v-home, main:not([data-view="air"]) .v-air,
-main:not([data-view="weather"]) .v-weather, main[data-view="home"] .v-sub { display: none; }
+main:not([data-view="weather"]) .v-weather, main:not([data-view="obs"]) .v-obs, main[data-view="home"] .v-sub { display: none; }
 .dots { display: flex; justify-content: center; gap: 8px; padding-bottom: var(--s2); }
 .dots[hidden] { display: none; }
 .dots button { width: 24px; height: 24px; padding: 0; border: 0; background: none; display: grid; place-items: center; cursor: pointer; }
@@ -188,8 +188,29 @@ main { touch-action: pan-y; }
 .sat-t { display: flex; gap: 4px; }
 .sat-t button { font: inherit; font-size: 16px; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 18px; background: none; color: var(--muted); cursor: pointer; }
 .sat-t button.on { border-color: var(--ink); color: var(--ink); }
-#sat-sec[hidden] { display: none; }
-#sat-img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--cloth2); }
+.v-obs[hidden], #obs-home[hidden] { display: none; }
+.map { position: relative; display: block; border-radius: 8px; overflow: hidden; background: var(--cloth2); }
+.map img { display: block; width: 100%; height: auto; min-height: 120px; }
+.map svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.map .lt { fill: #ffd400; stroke: #4a3a00; stroke-width: 2; }
+.map .lt.g { fill: #ff3b30; stroke: #fff; }
+.map .me { fill: none; stroke: #111; stroke-width: 5; }
+.map .me2 { fill: #fff; stroke: #111; stroke-width: 3; }
+.cap { font-size: 16px; color: var(--muted); }
+.thumb { display: grid; grid-template-columns: 112px 1fr; gap: var(--s2); align-items: center; }
+.thumb img { width: 112px; height: 112px; object-fit: cover; border-radius: 6px; background: var(--cloth2); }
+.thumb .lines { display: flex; flex-direction: column; gap: 6px; }
+.uvbig { display: flex; align-items: baseline; gap: var(--s2); }
+.uvbig b { font-family: var(--display); font-size: var(--t3); line-height: 1; font-weight: 500; }
+.uvgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.uvgrid div { display: flex; justify-content: space-between; gap: 6px; padding: 6px 10px; border-radius: 6px; background: var(--cloth); font-size: 16px; }
+.uvgrid b { font-weight: 600; }
+.uvk { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.rank { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); }
+.rank ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 16px; }
+.rank li { display: flex; justify-content: space-between; gap: 4px; }
+.rank li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
 .top.v-sub { color: var(--ink); justify-content: flex-start; }
 .top.v-sub strong { font-size: 20px; font-weight: 600; min-width: 0; }
 #back { white-space: nowrap; flex: none; }
@@ -351,10 +372,18 @@ main { touch-action: pan-y; }
     </div>
   </section>
 
-  <section class="v-home" id="sat-sec" hidden>
-    <div class="sat-h"><h2>衛星雲圖</h2><span class="sat-t" id="sat-tabs"></span></div>
-    <img id="sat-img" alt="臺灣附近的衛星雲圖" loading="lazy">
-    <span class="muted" id="sat-time"></span>
+  <section class="v-home" id="obs-home" hidden>
+    <h2>觀測</h2>
+    <div class="tap" role="button" tabindex="0" data-go="obs">
+      <div class="thumb">
+        <img id="radar-thumb" alt="雷達回波縮圖">
+        <div class="lines">
+          <b id="light-home"></b>
+          <span class="muted">雷達・衛星雲圖・雨量・溫度・紫外線・排行榜</span>
+        </div>
+      </div>
+      <span class="chev">觀測圖<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </div>
   </section>
 
   <!-- 天氣詳細 -->
@@ -413,6 +442,43 @@ main { touch-action: pan-y; }
       <div class="bars" id="aq-bars" role="img" aria-label="過去 24 小時 AQI"></div>
       <div class="axis muted"><span id="aq-from"></span><span>現在</span></div>
     </div>
+  </section>
+
+  <!-- 觀測 -->
+  <section class="v-obs" id="o-radar" hidden>
+    <h2>雷達回波・閃電</h2>
+    <a class="map" id="radar-link" target="_blank" rel="noopener"><img id="radar-img" alt="雷達整合回波圖，疊上過去一小時的閃電位置"><svg id="radar-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+    <span class="cap" id="radar-cap"></span>
+    <span class="cap" id="light-cap"></span>
+  </section>
+  <section class="v-obs" id="o-sat" hidden>
+    <div class="sat-h"><h2>衛星雲圖</h2><span class="sat-t" id="sat-tabs"></span></div>
+    <a class="map" id="sat-link" target="_blank" rel="noopener"><img id="sat-img" alt="臺灣附近的衛星雲圖"></a>
+    <span class="cap" id="sat-time"></span>
+  </section>
+  <section class="v-obs" id="o-rain" hidden>
+    <h2>今日累積雨量</h2>
+    <a class="map" id="rain-link" target="_blank" rel="noopener"><img id="rain-img" alt="今日累積雨量分布圖" loading="lazy"></a>
+    <span class="cap" id="rain-cap"></span>
+  </section>
+  <section class="v-obs" id="o-temp" hidden>
+    <h2>溫度分布</h2>
+    <a class="map" id="temp-link" target="_blank" rel="noopener"><img id="temp-img" alt="全臺溫度分布圖" loading="lazy"></a>
+    <span class="cap" id="temp-cap"></span>
+  </section>
+  <section class="v-obs" id="o-uv" hidden>
+    <h2>紫外線測報</h2>
+    <div class="uvbig"><b id="uv-now"></b><span id="uv-lv"></span></div>
+    <span class="cap" id="uv-cap"></span>
+    <div class="uvgrid" id="uv-grid"></div>
+  </section>
+  <section class="v-obs" id="o-rank" hidden>
+    <h2>今日排行榜</h2>
+    <div class="rank" id="rank"></div>
+    <span class="cap" id="rank-cap"></span>
+  </section>
+  <section class="v-obs">
+    <p class="cap">點圖可以放大看原圖。資料來源：中央氣象署。</p>
   </section>
 
   <p class="note" id="note"></p>
@@ -839,6 +905,7 @@ function fromData(T, D) {
 /* ---------- 地點 ---------- */
 const pname = p => p.c + p.t;
 const seedOf = s => [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7);
+let OB = null, satKind = "ir", here = null;
 let places = [{ c: "臺北市", t: "中正區" }], active = 0, editing = false, liveOK = false;
 try {
   const saved = JSON.parse(store.get("places") || "null");
@@ -852,6 +919,7 @@ const savePlaces = () => { store.set("places", JSON.stringify(places)); store.se
 
 async function load() {
   const p = places[active], c = COUNTY[p.c];
+  here = { lat: c.lat, lon: c.lon }; if (OB) drawObs();
   $("place-name").textContent = pname(p);
   renderDots();
   if ($("app").dataset.view !== "home") $("sub-title").textContent = pname(p) + "・" + VIEWS[$("app").dataset.view];
@@ -859,7 +927,7 @@ async function load() {
   render(sample(c.lat, seedOf(pname(p))));            // 先有畫面
   try {
     const D = await countyData(p.c), T = D.towns[p.t];
-    if (T && places[active] === p) { const d = fromData(T, D); liveOK = true; render(d); }
+    if (T && places[active] === p) { const d = fromData(T, D); liveOK = true; render(d); if (T.lat != null && T.lon != null) { here = { lat: T.lat, lon: T.lon }; drawObs(); } }
   } catch (e) { /* 讀不到就留在示範資料 */ }
 }
 
@@ -942,7 +1010,7 @@ function renderPlaces() {
     } catch (e) {}
   });
 }
-const VIEWS = { weather: "天氣", air: "空氣" };
+const VIEWS = { weather: "天氣", air: "空氣", obs: "觀測" };
 function setView(v) {
   if (!VIEWS[v]) v = "home";
   $("app").dataset.view = v;
@@ -992,26 +1060,92 @@ $("a-ok").addEventListener("click", () => {
 load();
 setView(location.hash.slice(1));
 
-/* ---------- 衛星雲圖 ---------- */
-let satKind = "ir";
-async function loadSat() {
-  try {
-    const r = await fetch("data/sat.json", { cache: "no-cache" });
-    if (!r.ok) return;
-    const S = await r.json(), names = { ir: "紅外線", vis: "可見光" }, have = Object.keys(names).filter(k => S[k]);
-    if (!have.length) return;
-    if (!S[satKind]) satKind = have[0];
-    const show = () => {
-      const x = S[satKind], t = x.time ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(x.time) ? x.time : x.time.replace(" ", "T") + "Z") : null;
-      $("sat-img").src = "data/" + x.file + "?t=" + encodeURIComponent(x.time || Date.now());
-      $("sat-time").textContent = (t && !isNaN(t) ? "觀測時間 " + hhmm(new Date(t.getTime() + 8 * 3600e3).getUTCHours() * 60 + new Date(t.getTime() + 8 * 3600e3).getUTCMinutes()) + "・" : "") + (satKind === "vis" ? "可見光在晚上是黑的" : "越白越亮的地方，雲越高越厚");
-      $("sat-tabs").innerHTML = have.length > 1 ? have.map(k => `<button type="button" class="${k === satKind ? "on" : ""}" data-k="${k}">${names[k]}</button>`).join("") : "";
-    };
-    $("sat-tabs").onclick = e => { const b = e.target.closest("[data-k]"); if (b) { satKind = b.dataset.k; show(); } };
-    show(); $("sat-sec").hidden = false;
-  } catch (e) {}
+/* ---------- 觀測圖 ---------- */
+
+const twTime = v => {
+  if (!v) return "";
+  const t = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(v) ? v : v.replace(" ", "T") + "+08:00");
+  if (isNaN(t)) return "";
+  const w = new Date(t.getTime() + 8 * 3600e3);
+  return (w.getUTCMonth() + 1) + "/" + w.getUTCDate() + " " + hhmm(w.getUTCHours() * 60 + w.getUTCMinutes());
+};
+const kmTo = (a, b, c, d) => { const r = Math.PI / 180, x = (d - b) * r * Math.cos((a + c) / 2 * r), y = (c - a) * r; return Math.sqrt(x * x + y * y) * 6371; };
+const UVL = v => v < 3 ? ["低量", "#4caf50"] : v < 6 ? ["中量", "#f2c200"] : v < 8 ? ["高量", "#f08a24"] : v < 11 ? ["過量", "#e0412b"] : ["危險", "#8e44ad"];
+function setImg(key, m) {
+  const src = "data/" + m.file + "?t=" + encodeURIComponent(m.time || "");
+  $(key + "-img").src = src; $(key + "-link").href = src;
 }
-loadSat();
+function drawObs() {
+  if (!OB) return;
+  const M = OB.maps, L = OB.light, O = OB.obs;
+  const show = (id, on) => { $(id).hidden = !on; };
+  // 雷達＋閃電
+  show("o-radar", !!M.radar);
+  let near = null, n = 0, g = 0;
+  if (L && L.pts) {
+    n = L.pts.length; g = L.pts.filter(p => p[2]).length;
+    if (here) L.pts.forEach(p => { const d = kmTo(here.lat, here.lon, p[1], p[0]); if (near === null || d < near) near = d; });
+  }
+  const lightText = !L ? "" : n === 0 ? "過去 1 小時沒有閃電" : `過去 1 小時閃電 ${n} 次` + (g ? `（打到地面 ${g} 次）` : "") + (near !== null ? `，離你最近 ${near < 10 ? near.toFixed(1) : Math.round(near)} 公里` : "");
+  if (M.radar) {
+    setImg("radar", M.radar);
+    $("radar-thumb").src = $("radar-img").src;
+    $("radar-cap").textContent = "觀測時間 " + twTime(M.radar.time) + "・顏色越紅越紫，雨越大";
+    const lo = M.radar.lon, la = M.radar.lat;
+    let svg = "";
+    if (lo && la) {
+      const X = x => (x - lo[0]) / (lo[1] - lo[0]) * 1000, Y = y => (la[1] - y) / (la[1] - la[0]) * 1000;
+      if (L && L.pts) svg += L.pts.map(p => `<circle class="lt${p[2] ? " g" : ""}" cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="${p[2] ? 10 : 8}"/>`).join("");
+      if (here) svg += `<circle class="me" cx="${X(here.lon).toFixed(1)}" cy="${Y(here.lat).toFixed(1)}" r="16"/><circle class="me2" cx="${X(here.lon).toFixed(1)}" cy="${Y(here.lat).toFixed(1)}" r="6"/>`;
+    }
+    $("radar-svg").innerHTML = svg;
+    $("light-cap").textContent = lightText ? lightText + (n ? "。紅點是打到地面的閃電，黃點是雲裡的閃電" : "") + (here ? "，黑圈是你選的地點。" : "。") : "";
+  }
+  $("light-home").textContent = lightText || "雷達回波";
+  show("obs-home", !!(M.radar || M.ir || M.vis || M.rain || M.temp || O));
+  // 衛星雲圖
+  const names = { ir: "紅外線", vis: "可見光" }, have = Object.keys(names).filter(k => M[k]);
+  show("o-sat", have.length > 0);
+  if (have.length) {
+    if (!M[satKind]) satKind = have[0];
+    const x = M[satKind];
+    $("sat-img").src = $("sat-link").href = "data/" + x.file + "?t=" + encodeURIComponent(x.time || "");
+    $("sat-time").textContent = (twTime(x.time) ? "觀測時間 " + twTime(x.time) + "・" : "") + (satKind === "vis" ? "可見光只有白天看得到，晚上請看紅外線" : "越白越亮的地方，雲越高越厚");
+    $("sat-tabs").innerHTML = have.length > 1 ? have.map(k => `<button type="button" class="${k === satKind ? "on" : ""}" data-k="${k}">${names[k]}</button>`).join("") : "";
+  }
+  show("o-rain", !!M.rain); if (M.rain) { setImg("rain", M.rain); $("rain-cap").textContent = "從今天 0 點累積到 " + twTime(M.rain.time); }
+  show("o-temp", !!M.temp); if (M.temp) { setImg("temp", M.temp); $("temp-cap").textContent = "觀測時間 " + twTime(M.temp.time); }
+  // 紫外線
+  const uv = O && O.uv ? O.uv : [];
+  show("o-uv", uv.length > 0);
+  if (uv.length) {
+    let best = null, bd = Infinity;
+    if (here) uv.forEach(u => { const d = kmTo(here.lat, here.lon, u[4], u[5]); if (d < bd) { bd = d; best = u; } });
+    if (best) {
+      const lv = UVL(best[3]);
+      $("uv-now").textContent = best[3];
+      $("uv-lv").innerHTML = `<span class="uvk" style="background:${lv[1]}"></span>${lv[0]}`;
+      $("uv-cap").textContent = `離你最近的 ${best[0]} 站，約 ${Math.round(bd)} 公里・${twTime(O.time)} 觀測`;
+    } else { $("uv-now").textContent = ""; $("uv-lv").textContent = ""; $("uv-cap").textContent = twTime(O.time) + " 觀測"; }
+    $("uv-grid").innerHTML = uv.slice().sort((a, b) => b[3] - a[3]).map(u => `<div><span><span class="uvk" style="background:${UVL(u[3])[1]}"></span>${u[0]}</span><b>${u[3]}</b></div>`).join("");
+  }
+  // 排行榜
+  const hasRank = O && (O.hi && O.hi.length || O.lo && O.lo.length);
+  show("o-rank", !!hasRank);
+  if (hasRank) {
+    const col = (t, list, unit) => `<div><h3>${t}</h3><ol>` + (list && list.length ? list.map(r => `<li><span>${r[0]}</span><b>${r[3]}${unit}</b></li>`).join("") : `<li><span class="muted">今天還沒下雨</span></li>`) + "</ol></div>";
+    $("rank").innerHTML = col("最高溫", O.hi, "°") + col("最低溫", O.lo, "°") + col("雨量", O.rain, "");
+    $("rank-cap").textContent = "全臺測站，今天 0 點到 " + twTime(O.time) + "；雨量單位是毫米。";
+  }
+}
+$("sat-tabs").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) { satKind = b.dataset.k; drawObs(); } });
+async function loadObs() {
+  const get = f => fetch("data/" + f, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null);
+  const [m, l, o] = await Promise.all([get("maps.json"), get("lightning.json"), get("obs.json")]);
+  OB = { maps: m || {}, light: l, obs: o };
+  drawObs();
+}
+loadObs();
 
 /* 開著不關、或從背景切回來時，自動換成最新資料 */
 let lastLoad = Date.now();
@@ -1024,7 +1158,7 @@ async function refresh() {
     const D = await countyData(p.c), T = D.towns[p.t];
     if (T && places[active] === p) render(fromData(T, D));
   } catch (e) {}
-  loadSat();
+  loadObs();
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 setInterval(() => { if (!document.hidden) refresh(); }, 5 * 60e3);

@@ -1,6 +1,7 @@
 // 定時向中央氣象署、環境部抓資料，整理成網頁要讀的 data/*.json。
 // 金鑰只從環境變數讀（GitHub Secrets：CWA_KEY、MOENV_KEY），不會寫進任何輸出檔。
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, unlink } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 
 const CWA = (process.env.CWA_KEY || "").trim();
 const MOENV = (process.env.MOENV_KEY || "").trim();
@@ -116,7 +117,11 @@ function stations(json) {
       county: ci(geo, "CountyName"), town: ci(geo, "TownName"),
       lat: num(ci(co, "StationLatitude")), lon: num(ci(co, "StationLongitude")),
       temp: num(ci(we, "AirTemperature")), rh: num(ci(we, "RelativeHumidity")),
-      ws: num(ci(we, "WindSpeed")), wd: num(ci(we, "WindDirection")), rain: num(ci(ci(we, "Now"), "Precipitation"))
+      ws: num(ci(we, "WindSpeed")), wd: num(ci(we, "WindDirection")), rain: num(ci(ci(we, "Now"), "Precipitation")),
+      uv: num(ci(we, "UVIndex")),
+      hi: num(ci(ci(ci(ci(we, "DailyExtreme"), "DailyHigh"), "TemperatureInfo"), "AirTemperature")),
+      lo: num(ci(ci(ci(ci(we, "DailyExtreme"), "DailyLow"), "TemperatureInfo"), "AirTemperature")),
+      syn: false
     };
   }).filter(s => s.temp !== null && s.lat !== null && s.lon !== null);
 }
@@ -144,7 +149,7 @@ async function main() {
   let obs = [];
   if (CWA) {
     for (const id of ["O-A0003-001", "O-A0001-001"]) {
-      try { const list = stations(await getJSON(cwaUrl(id))); status.seen[id] = list.length; obs = obs.concat(list); }
+      try { const list = stations(await getJSON(cwaUrl(id))); if (id === "O-A0003-001") list.forEach(x => { x.syn = true; }); status.seen[id] = list.length; obs = obs.concat(list); }
       catch (e) { fail("觀測 " + id, e); }
     }
   }
@@ -191,36 +196,92 @@ async function main() {
   }
   if (CWA) for (let i = 0; i < names.length; i += 4) await Promise.all(names.slice(i, i + 4).map(county));
 
-  // 衛星雲圖（臺灣範圍）：先問檔案 API 拿圖檔位址，再把圖存成網站自己的檔案
-  const sat = {};
-  const findUrl = o => {
-    if (typeof o === "string") return /^https?:\/\/\S+\.(jpe?g|png)(\?\S*)?$/i.test(o) ? o : null;
-    if (o && typeof o === "object") for (const k in o) { const u = findUrl(o[k]); if (u) return u; }
+  // 觀測圖：先問檔案 API 拿圖檔位址，再把圖縮小存成網站自己的檔案
+  const findUrl = (o, re) => {
+    if (typeof o === "string") return re.test(o) ? o : null;
+    if (o && typeof o === "object") for (const k in o) { const u = findUrl(o[k], re); if (u) return u; }
     return null;
   };
-  const findTime = o => {
+  const findKey = (o, re) => {
     if (o && typeof o === "object") for (const k in o) {
-      if (/^(datetime|obstime)$/i.test(k) && typeof o[k] === "string") return o[k];
-      const t = findTime(o[k]); if (t) return t;
+      if (re.test(k) && typeof o[k] === "string") return o[k];
+      const t = findKey(o[k], re); if (t) return t;
     }
     return null;
   };
-  if (CWA) for (const [key, id] of [["ir", "O-C0042-002"], ["vis", "O-C0042-008"]]) {
+  const range = v => { const m = String(v || "").match(/(-?[\d.]+)\s*-\s*(-?[\d.]+)/); return m ? [Number(m[1]), Number(m[2])] : null; };
+  const fileapi = id => getJSON("https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/" + id + "?Authorization=" + encodeURIComponent(CWA) + "&downloadType=WEB&format=JSON");
+  let magick = null;
+  for (const c of ["magick", "convert"]) { try { execFileSync(c, ["-version"], { stdio: "ignore" }); magick = c; break; } catch (e) {} }
+  status.magick = magick;
+  const maps = {};
+  const IMG = /^https?:\/\/\S+\.(jpe?g|png)(\?\S*)?$/i;
+  const MAPS = [
+    ["radar", ["O-A0058-004", "O-A0058-003"]], ["ir", ["O-C0042-002"]], ["vis", ["O-C0042-008"]],
+    ["rain", ["O-A0040-002", "O-A0040-001"]], ["temp", ["O-A0038-001"]]
+  ];
+  if (CWA) for (const [key, ids] of MAPS) {
+    for (const id of ids) {
+      try {
+        const j = await fileapi(id), u = findUrl(j, IMG);
+        if (!u) throw new Error("找不到圖檔位址");
+        const r = await fetch(u, { signal: AbortSignal.timeout(90000) });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (buf.length < 5000) throw new Error("圖檔太小");
+        const raw = OUT + "/raw-" + key + (/\.png/i.test(u) ? ".png" : ".jpg"), file = "map-" + key + ".jpg";
+        await writeFile(raw, buf);
+        let size = null;
+        if (magick) {
+          try {
+            execFileSync(magick, [raw, "-resize", "1080x1080>", "-quality", "82", OUT + "/" + file]);
+            size = execFileSync(magick === "magick" ? "magick" : "identify", (magick === "magick" ? ["identify"] : []).concat(["-format", "%w %h", OUT + "/" + file])).toString().split(" ").map(Number);
+          } catch (e) { size = null; }
+        }
+        if (!size) { await writeFile(OUT + "/" + file.replace(".jpg", raw.slice(-4)), buf); }
+        await unlink(raw);
+        maps[key] = { file: size ? file : file.replace(".jpg", raw.slice(-4)), id, time: findKey(j, /^(datetime|obstime|date)$/i), lon: range(findKey(j, /^longituderange$/i)), lat: range(findKey(j, /^latituderange$/i)) };
+        status.seen["map-" + key] = id + " " + buf.length;
+        break;
+      } catch (e) { fail("觀測圖 " + id, e); }
+    }
+  }
+  await writeFile(OUT + "/maps.json", JSON.stringify(maps));
+
+  // 閃電：過去 1 小時的閃電位置（KMZ 壓縮檔）
+  const light = { time: null, pts: [] };
+  if (CWA) {
     try {
-      const j = await getJSON("https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/" + id + "?Authorization=" + encodeURIComponent(CWA) + "&downloadType=WEB&format=JSON");
-      const u = findUrl(j);
-      if (!u) throw new Error("找不到圖檔位址");
+      const j = await fileapi("O-A0039-001"), u = findUrl(j, /^https?:\/\/\S+\.km[lz](\?\S*)?$/i);
+      if (!u) throw new Error("找不到閃電檔位址");
       const r = await fetch(u, { signal: AbortSignal.timeout(60000) });
       if (!r.ok) throw new Error("HTTP " + r.status);
-      const buf = Buffer.from(await r.arrayBuffer());
-      if (buf.length < 5000) throw new Error("圖檔太小");
-      const file = "sat-" + key + (/\.png/i.test(u) ? ".png" : ".jpg");
-      await writeFile(OUT + "/" + file, buf);
-      sat[key] = { file, time: findTime(j) };
-      status.seen["sat-" + key] = buf.length;
-    } catch (e) { fail("衛星雲圖 " + id, e); }
+      const buf = Buffer.from(await r.arrayBuffer()), tmp = OUT + "/tmp-light";
+      let kml;
+      if (buf[0] === 0x50 && buf[1] === 0x4b) { await writeFile(tmp, buf); kml = execFileSync("unzip", ["-p", tmp], { maxBuffer: 64 << 20 }).toString("utf8"); await unlink(tmp); }
+      else kml = buf.toString("utf8");
+      for (const m of kml.matchAll(/<Placemark[\s\S]*?<\/Placemark>/gi)) {
+        const c = m[0].match(/<coordinates>\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)/i);
+        if (c) light.pts.push([Number(c[1]), Number(c[2]), /對地|ground/i.test(m[0]) ? 1 : 0]);
+      }
+      light.time = findKey(j, /^(datetime|obstime|date|sent)$/i) || new Date().toISOString();
+      status.seen.lightning = light.pts.length;
+    } catch (e) { fail("閃電", e); }
   }
-  await writeFile(OUT + "/sat.json", JSON.stringify(sat));
+  await writeFile(OUT + "/lightning.json", JSON.stringify(light));
+
+  // 紫外線（綜觀站）與今日排行
+  if (obs.length) {
+    const uniq = new Map(); obs.forEach(x => { if (!uniq.has(x.station)) uniq.set(x.station, x); });
+    const all = [...uniq.values()], pick = x => [x.station, x.county || "", x.town || ""];
+    const top = (key, dir, n = 5) => all.filter(x => x[key] !== null && x[key] > -50).sort((a, b) => dir * (b[key] - a[key])).slice(0, n).map(x => pick(x).concat(x[key]));
+    await writeFile(OUT + "/obs.json", JSON.stringify({
+      time: (all.find(x => x.syn) || all[0]).time,
+      uv: all.filter(x => x.syn && x.uv !== null && x.uv >= 0).map(x => pick(x).concat(x.uv, x.lat, x.lon)),
+      hi: top("hi", 1), lo: top("lo", -1), rain: top("rain", 1).filter(x => x[3] > 0)
+    }));
+  }
+
 
   status.totalTowns = Object.values(status.counties).reduce((a, b) => a + b, 0);
   status.finished = new Date().toISOString();
