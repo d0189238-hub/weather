@@ -278,16 +278,16 @@ async function main() {
     }
   }
   await writeFile(OUT + "/maps.json", JSON.stringify(maps));
-  if (CWA && process.env.SAT_DIAG) {
-    const out = {};
-    for (let n = 1; n <= 16; n++) {
-      const id = "O-C0042-" + String(n).padStart(3, "0");
-      try {
-        const j = await fileapi(id), u = findUrl(j, IMG);
-        let size = null, type = null;
-        if (u) { const h = await fetch(u, { method: "HEAD", signal: AbortSignal.timeout(20000) }); size = h.headers.get("content-length"); type = h.headers.get("content-type"); }
-        out[id] = { name: findKey(j, /^(datasetdescription|description|title|name)$/i), time: findKey(j, /^(datetime|obstime|date)$/i), u: u ? u.replace(/Authorization=[^&]+/, "") : null, size, type, lon: findKey(j, /^longituderange$/i), lat: findKey(j, /^latituderange$/i) };
-      } catch (e) { out[id] = String(e.message || e).slice(0, 80); }
+  if (process.env.SAT_DIAG) {
+    const out = {}, tw = new Date(Date.now() + 8 * 3600e3);
+    const slots = [20, 30, 40].map(m => { const d = new Date(Math.floor((tw.getTime() - m * 60e3) / 600e3) * 600e3); const p = n => String(n).padStart(2, "0"); return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}-${p(d.getUTCHours())}-${p(d.getUTCMinutes())}`; });
+    for (const prod of ["LCC_IR1_CR_2750", "LCC_TRGB_2750", "LCC_VIS_Gray_2750", "LCC_VIS_TRGB_2750", "LCC_IR1_MB_2750", "LCC_IR1_BW_2750", "LCC_IR1_CR_1000", "s1p_IR1_CR_2750"]) {
+      out[prod] = [];
+      for (const t of slots) {
+        const u = `https://www.cwa.gov.tw/Data/satellite/${prod}/${prod}-${t}.jpg`;
+        try { const h = await fetch(u, { method: "HEAD", signal: AbortSignal.timeout(15000) }); out[prod].push(t + " " + h.status + " " + (h.headers.get("content-length") || "")); }
+        catch (e) { out[prod].push(t + " ERR " + String(e.message || e).slice(0, 40)); }
+      }
     }
     status.seen.satDiag = out;
   }
