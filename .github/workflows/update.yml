@@ -24,6 +24,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: 圖資樣式診斷（暫時）
+        if: github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        run: |
+          for L in PHOTO2 PHOTO_MIX EMAP EMAP2 EMAP5 EMAP6 EMAP8 TOWN CITY; do
+            curl -s -m 15 "https://wmts.nlsc.gov.tw/wmts/$L/default/GoogleMapsCompatible/12/1764/3419" -o t.bin && echo "TILE $L $(base64 -w0 t.bin)"
+          done
       - name: 安裝圖片與推播套件
         run: npm install --no-save --no-package-lock --no-audit --no-fund pngjs@7 jpeg-js@0.4 web-push@3
       - name: 抓取中央氣象署與環境部資料
