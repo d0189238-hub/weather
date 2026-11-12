@@ -866,76 +866,117 @@ async function main() {
           const name = p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t;
           if (!quiet) {
             const e10 = echo(T.lat, T.lon, 10);
-            if (e10 !== null && e10 >= 30) out.push({ k: "rd|" + key, cool: 3, text: `${name}附近 10 公里內有雨，衣服記得收` });
-            else { const n = nowcast.towns[key]; if (n && n.eta <= 45) out.push({ k: "nc|" + key, cool: 3, text: `${name}${n.from}邊約 ${n.km} 公里有雨帶，約 ${n.eta} 分鐘後可能到，衣服先收（雷達推估）` }); }
+            if (e10 !== null && e10 >= 30) out.push({ k: "rd|" + key, cool: 3, text: `${name}｜10 公里內有降雨，建議收衣` });
+            else { const n = nowcast.towns[key]; if (n && n.eta <= 45) out.push({ k: "nc|" + key, cool: 3, text: `${name}｜雨帶約 ${n.eta} 分鐘後抵達（${n.from}方 ${n.km} 公里，雷達推估）` }); }
             const rows = (T.f || []).map(r => ({ ms: Date.parse(r[0]), p: r[3] })).filter(r => r.p != null);
             const cur = rows.filter(r => r.ms <= now).pop(), up = rows.find(r => r.ms > now && r.ms <= now + 3 * 3600e3 && r.p >= 70);
-            if (up && (!cur || cur.p < 50)) out.push({ k: "fc|" + key + "|" + up.ms, cool: 24, text: `${name} ${new Date(up.ms + 8 * 3600e3).getUTCHours()} 點起降雨機率 ${up.p}%，有曬衣服記得收` });
+            if (up && (!cur || cur.p < 50)) out.push({ k: "fc|" + key + "|" + up.ms, cool: 24, text: `${name}｜${new Date(up.ms + 8 * 3600e3).getUTCHours()} 時起降雨機率 ${up.p}%` });
           }
-          for (const z of warn[p.c] || []) out.push({ k: "wn|" + p.c + "|" + z.name + "|" + z.end, cool: 24, text: `${p.c}發布${z.name}` });
+          for (const z of (warn[p.c] || []).filter(z => /雨|颱風/.test(z.name))) out.push({ k: "wn|" + p.c + "|" + z.name + "|" + z.end, cool: 24, text: `${p.c}｜${z.name}` });
         }
         return (cache[key] = out);
       };
-      // 每天晚上 8 點：依你選的地點，一則簡短的明天＋這週重點
-      const twNow = new Date(now + 8 * 3600e3), todayStr = twNow.toISOString().slice(0, 10), digestTime = twH === 20;
+      // 每天早上 6 點（今天）、晚上 8 點（明天＋這週），加上預報有明顯改變時，依你選的地點推一則簡短通知
+      const twNow = new Date(now + 8 * 3600e3), todayStr = twNow.toISOString().slice(0, 10);
+      const digestMode = twH === 6 ? "am" : twH === 20 ? "pm" : null, preview = !!process.env.DIGEST_PREVIEW;
       const WK = ["日", "一", "二", "三", "四", "五", "六"];
-      const dayName = (date, ahead) => { const wd = new Date(date + "T00:00:00Z").getUTCDay(); return ahead === 1 ? "明天" : ahead === 2 ? "後天" : ((ahead >= 7 || (wd !== 0 && wd <= twNow.getUTCDay()) || (twNow.getUTCDay() === 0 && wd !== 0)) ? "下週" : "週") + WK[wd]; };
+      const dayName = (date, ahead) => { const wd = new Date(date + "T00:00:00Z").getUTCDay(); return ahead === 0 ? "今日" : ahead === 1 ? "明日" : ahead === 2 ? "後天" : ((ahead >= 7 || (wd !== 0 && wd <= twNow.getUTCDay()) || (twNow.getUTCDay() === 0 && wd !== 0)) ? "下週" : "週") + WK[wd]; };
+      const ahead = d => Math.round((Date.parse(d) - Date.parse(todayStr)) / 864e5);
       // 原因：從氣象署「全臺天氣小幫手」裡挑出講天氣系統的句子（東北季風、冷空氣、鋒面…）
-      let why = null;
-      if (digestTime || process.env.DIGEST_PREVIEW) {
+      const whyOf = { 今天: null, 明天: null };
+      if (digestMode || preview) {
         try {
           const j = await fileapi("F-C0032-031"), u = findUrl(j, /^https?:\/\/\S+$/i);
           const r = await fetch(u, { signal: AbortSignal.timeout(20000) });
           let txt = new TextDecoder("big5").decode(Buffer.from(await r.arrayBuffer()));
-          if (!/[今明]天/.test(txt)) txt = new TextDecoder("utf-8").decode(Buffer.from(txt));
           txt = txt.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\s+/g, "");
           const KEY = /東北季風|冷空氣|冷氣團|寒流|鋒面|華南雲雨區|颱風|熱帶性低氣壓|低壓|西南氣流|西南風|南風|東風|太平洋高壓|高壓|輻射冷卻|熱對流|水氣/;
-          const para = w => { const m = txt.match(new RegExp(w + "（\\d+日）(.*?)(?=今天（|明天（|後天（|離島天氣|根據|$)")); return m ? m[1] : ""; };
-          for (const p of [para("明天"), para("今天")]) {
-            const cl = p.split(/[，；。]/).filter(c => KEY.test(c) && !/溫度方面|高溫|低溫/.test(c)).map(c => c.replace(/^(環境)?(轉為|轉)?/, m => m.replace("環境", ""))).slice(0, 2);
-            if (cl.length) { why = cl.join("、").replace(/^受/, "受"); break; }
-          }
-          status.seen.digestWhy = why;
+          const para = w => { const m = txt.match(new RegExp(w + "（\\d+日）(.*?)(?=今天（|今晚|明天（|後天（|離島天氣|根據|$)")); return m ? m[1] : ""; };
+          const pick = p => { const cl = p.split(/[，；。]/).filter(c => KEY.test(c) && !/溫度方面|高溫|低溫/.test(c)).map(c => c.replace(/^環境/, "")).slice(0, 2); return cl.length ? cl.join("、") : null; };
+          const t0 = pick(para("今天")), t1 = pick(para("明天"));
+          whyOf.今天 = t0 || t1; whyOf.明天 = t1 || t0;
+          status.seen.digestWhy = whyOf;
         } catch (e) { status.seen.digestWhy = "讀取失敗 " + String(e.message || e).slice(0, 80); }
       }
-      const digestFor = s => {
-        const pl = (s.places || []).slice(0, 4).map(p => ({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, T: townData[p.c + "|" + p.t] })).filter(x => x.T && x.T.w && x.T.w.length);
-        if (!pl.length) return null;
+      const placesOf = s => (s.places || []).slice(0, 4).map(p => ({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, T: townData[p.c + "|" + p.t] })).filter(x => x.T && x.T.w && x.T.w.length);
+      const coldMonth = () => { const m = twNow.getUTCMonth() + 1; return m >= 10 || m <= 4; };
+      // 整理成「事實」：明天會不會下雨、最近的雨天、轉涼的日子、很熱的日子
+      const factsOf = s => {
+        const pl = placesOf(s); if (!pl.length) return null;
         const dayRows = date => pl.map(x => x.T.w.find(r => r[0] === date)).filter(Boolean);
-        const dates = [...new Set(pl.flatMap(x => x.T.w.map(r => r[0])))].filter(d => d > todayStr).sort().slice(0, 7);
-        if (!dates.length) return null;
-        const ahead = d => Math.round((Date.parse(d) - Date.parse(todayStr)) / 864e5);
-        // 明天
-        const t1 = dates[0], R = dayRows(t1);
-        const temps = pl.map(x => { const r = x.T.w.find(r => r[0] === t1); return r && r[1] != null ? `${x.name} ${Math.round(r[2])}～${Math.round(r[1])}°` : null; }).filter(Boolean);
-        const pop = Math.max(...R.map(r => r[4] ?? 0)), wet = R.reduce((a, r) => a | (r[6] || 0), 0);
-        const verdict = pop >= 60 || wet & 1 ? "有雨，衣服室內晾" : wet & 2 ? "白天好曬，晚上有雨，傍晚前收" : pop >= 30 ? "可能有短暫雨，曬了早點收" : "整天好曬";
-        let body = (why ? why + "。" : "") + `明天 ${temps.join("、")}，${verdict}。`;
-        // 這週重點：最先遇到的雨天、明顯轉涼、很熱（最多兩件）
-        const notes = [], hiOf = d => { const rs = dayRows(d).filter(r => r[1] != null); return rs.length ? [Math.min(...rs.map(r => r[1])), Math.max(...rs.map(r => r[1]))] : null; };
-        const rest = dates.slice(1);
-        const rainDay = rest.find(d => dayRows(d).some(r => (r[4] ?? 0) >= 50 || r[6]));
-        if (rainDay) { const w = dayRows(rainDay).reduce((a, r) => a | (r[6] || 0), 0); notes.push({ d: rainDay, t: `${dayName(rainDay, ahead(rainDay))}${w === 2 ? "晚上" : ""}有雨` }); }
-        let prevMax = hiOf(t1) ? hiOf(t1)[1] : null;
-        for (const d of rest) { const h = hiOf(d); if (!h) continue; if (prevMax != null && prevMax - h[1] >= 5) { const m = twNow.getUTCMonth() + 1, cold = m >= 10 || m <= 4; notes.push({ d, t: `${dayName(d, ahead(d))}${cold ? "可能有冷空氣南下" : "轉涼"}，高溫只剩 ${h[0] === h[1] ? h[1] : h[0] + "～" + h[1]}°` }); break; } prevMax = Math.max(prevMax ?? h[1], h[1]); }
-        const hot = rest.find(d => { const h = hiOf(d); return h && h[1] >= 33; });
-        if (hot && notes.length < 2) notes.push({ d: hot, t: `${dayName(hot, ahead(hot))}高溫 ${hiOf(hot)[1]}°，很熱` });
-        notes.sort((a, b) => a.d < b.d ? -1 : 1);
-        body += notes.length ? notes.slice(0, 2).map(n => n.t).join("，") + "。" : "這週大致穩定。";
-        return { title: "曬衣服嗎・明天", body };
+        const dates = [...new Set(pl.flatMap(x => x.T.w.map(r => r[0])))].filter(d => d >= todayStr).sort().slice(0, 8);
+        const hiOf = d => { const rs = dayRows(d).filter(r => r[1] != null); return rs.length ? [Math.min(...rs.map(r => r[1])), Math.max(...rs.map(r => r[1]))] : null; };
+        const catOf = d => { const R = dayRows(d); if (!R.length) return null; const pop = Math.max(...R.map(r => r[4] ?? 0)), wet = R.reduce((a, r) => a | (r[6] || 0), 0); return pop >= 60 || wet & 1 ? "wet" : wet & 2 ? "night" : pop >= 30 ? "maybe" : "dry"; };
+        const t1 = dates.find(d => d > todayStr), rest = dates.filter(d => d > t1);
+        const rainDay = rest.find(d => dayRows(d).some(r => (r[4] ?? 0) >= 50 || r[6])) || null;
+        let cold = null, prevMax = t1 && hiOf(t1) ? hiOf(t1)[1] : null;
+        for (const d of rest) { const h = hiOf(d); if (!h) continue; if (prevMax != null && prevMax - h[1] >= 5) { cold = d; break; } prevMax = Math.max(prevMax ?? h[1], h[1]); }
+        const hot = rest.find(d => { const h = hiOf(d); return h && h[1] >= 33; }) || null;
+        return { pl, dayRows, hiOf, catOf, t1, rainDay, rainNight: rainDay ? dayRows(rainDay).reduce((a, r) => a | (r[6] || 0), 0) === 2 : false, cold, hot, t1cat: t1 ? catOf(t1) : null };
       };
+      const VERD = { wet: "有雨，宜室內晾衣", night: "晚間降雨，宜傍晚前收衣", maybe: "可能短暫降雨，宜提早收衣", dry: "全日宜曬衣" };
+      const rng = h => h[0] === h[1] ? h[1] : h[0] + "～" + h[1];
+      const noteTexts = (F, max) => {
+        const notes = [];
+        if (F.rainDay) notes.push({ d: F.rainDay, t: `${dayName(F.rainDay, ahead(F.rainDay))}${F.rainNight ? "晚間" : ""}降雨` });
+        if (F.cold) notes.push({ d: F.cold, t: `${dayName(F.cold, ahead(F.cold))}${coldMonth() ? "冷空氣南下" : "降溫"}，高溫 ${rng(F.hiOf(F.cold))}°` });
+        if (F.hot && notes.length < max) notes.push({ d: F.hot, t: `${dayName(F.hot, ahead(F.hot))}高溫 ${F.hiOf(F.hot)[1]}°` });
+        return notes.sort((a, b) => a.d < b.d ? -1 : 1).slice(0, max).map(n => n.t);
+      };
+      const digestFor = (s, mode) => {
+        const F = factsOf(s); if (!F) return null;
+        if (mode === "am") {
+          // 今天：溫度＋什麼時候可能下雨（逐時預報）
+          const temps = F.pl.map(x => { const r = x.T.w.find(r => r[0] === todayStr); return r && r[1] != null ? `${x.name} ${Math.round(r[2])}–${Math.round(r[1])}°` : null; }).filter(Boolean);
+          if (!temps.length) return null;
+          let first = null;
+          for (const x of F.pl) for (const r of x.T.f || []) { const t = Date.parse(r[0]), h = new Date(t + 8 * 3600e3).getUTCHours(); if (r[0].slice(0, 10) !== todayStr || h < 6 || h > 21) continue; if ((r[3] ?? 0) >= 50 || isRainCode(r[4])) { if (!first || t < first.t) first = { t, h }; break; } }
+          const verdict = !first ? "全日宜曬衣" : first.h <= 9 ? "上午起可能降雨，宜室內晾衣" : `${first.h} 時起可能降雨，宜${first.h >= 18 ? "傍晚" : first.h >= 13 ? "中午" : "上午"}前收衣`;
+          const n = noteTexts(F, 1);
+          return { title: "今日天氣", body: [whyOf.今天, temps.join("　"), verdict + (n.length ? "｜" + n[0] : "")].filter(Boolean).join("\n") };
+        }
+        if (!F.t1) return null;
+        const temps = F.pl.map(x => { const r = x.T.w.find(r => r[0] === F.t1); return r && r[1] != null ? `${x.name} ${Math.round(r[2])}–${Math.round(r[1])}°` : null; }).filter(Boolean);
+        const n = noteTexts(F, 2);
+        return { title: "明日天氣", body: [whyOf.明天, temps.join("　"), (VERD[F.t1cat] || "全日宜曬衣") + (n.length ? "｜" + n.join("・") : "")].filter(Boolean).join("\n") };
+      };
+      // 預報改變：跟上次告訴你的內容比，明天能不能曬變了、雨天提前、冷空氣或高溫新出現
+      state.fx = state.fx && typeof state.fx === "object" ? state.fx : {};
+      const snap = F => ({ t1: F.t1, c: F.t1cat, r: F.rainDay, k: F.cold, h: F.hot, at: now });
+      const changeFor = (F, old) => {
+        const out = [];
+        if (old.t1 === F.t1 && old.c && F.t1cat && old.c !== F.t1cat) {
+          const wetNow = F.t1cat === "wet" || F.t1cat === "night", wetOld = old.c === "wet" || old.c === "night";
+          if (wetNow !== wetOld) out.push(wetNow ? `明日轉為${F.t1cat === "wet" ? "降雨，宜室內晾衣" : "晚間降雨，宜傍晚前收衣"}` : "明日轉為無雨，宜曬衣");
+        }
+        if (F.rainDay && F.rainDay !== old.r && (!old.r || F.rainDay < old.r) && ahead(F.rainDay) <= 4) out.push(`${dayName(F.rainDay, ahead(F.rainDay))}${F.rainNight ? "晚間" : ""}可能降雨`);
+        if (F.cold && !old.k) out.push(`${dayName(F.cold, ahead(F.cold))}${coldMonth() ? "冷空氣南下" : "降溫"}，高溫 ${rng(F.hiOf(F.cold))}°`);
+        if (F.hot && !old.h) out.push(`${dayName(F.hot, ahead(F.hot))}高溫 ${F.hiOf(F.hot)[1]}°`);
+        return out;
+      };
+      let changes = 0;
+      const pushOne = async (s, payload) => libs.push.sendNotification(s.sub, JSON.stringify({ ...payload, url: site || "./" }),
+        { TTL: 3 * 3600, urgency: "normal", vapidDetails: { subject: site || "https://github.com", publicKey: s.pub, privateKey: s.priv } });
       const sendDigest = async (s, sh) => {
-        if (!digestTime) return;
-        const k = hash(sh + "|dg|" + todayStr); if (state.sent[k]) return;
-        const d = digestFor(s); if (!d) return;
-        try {
-          await libs.push.sendNotification(s.sub, JSON.stringify({ title: d.title, body: d.body, tag: "daily", url: site || "./" }),
-            { TTL: 3 * 3600, urgency: "normal", vapidDetails: { subject: site || "https://github.com", publicKey: s.pub, privateKey: s.priv } });
-          state.sent[k] = now; digests++;
-          if (!status.seen.digestSample) status.seen.digestSample = d.body;
-        } catch (e) { if (e.statusCode !== 404 && e.statusCode !== 410) fail("每日預報通知", (e.statusCode || "") + " " + String(e.body || e.message || "").slice(0, 120)); }
+        const F = factsOf(s); if (!F) return;
+        if (digestMode) {
+          const k = hash(sh + "|dg|" + digestMode + "|" + todayStr);
+          if (!state.sent[k]) {
+            const d = digestFor(s, digestMode); if (!d) return;
+            try { await pushOne(s, { title: d.title, body: d.body, tag: "daily" }); state.sent[k] = now; state.fx[sh] = snap(F); digests++; if (!status.seen.digestSample) status.seen.digestSample = d.body; }
+            catch (e) { if (e.statusCode !== 404 && e.statusCode !== 410) fail("每日預報通知", (e.statusCode || "") + " " + String(e.body || e.message || "").slice(0, 120)); }
+            return;
+          }
+        }
+        const old = state.fx[sh];
+        if (!old) { state.fx[sh] = snap(F); return; }               // 第一次只記下來，不推
+        if (quiet || now - (old.at || 0) < 4 * 3600e3) return;      // 夜裡不吵你；預報改變最多 4 小時推一次
+        const ch = changeFor(F, old);
+        if (!ch.length) { state.fx[sh] = { ...snap(F), at: old.at }; return; }
+        try { await pushOne(s, { title: "預報更新", body: ch.join("\n"), tag: "change" }); state.fx[sh] = snap(F); changes++; }
+        catch (e) { if (e.statusCode !== 404 && e.statusCode !== 410) fail("預報改變通知", (e.statusCode || "") + " " + String(e.body || e.message || "").slice(0, 120)); }
       };
-      if (process.env.DIGEST_PREVIEW) { for (const s of subs) { const d = digestFor(s); if (d) { status.seen.digestPreview = d.body; break; } } }
+      if (preview) { for (const s of subs) { const a = digestFor(s, "am"), b = digestFor(s, "pm"); if (a || b) { status.seen.digestPreview = { am: a && a.body, pm: b && b.body }; break; } } }
       let digests = 0;
       const dead = [];
       let sent = 0, failed = 0;
@@ -950,10 +991,9 @@ async function main() {
           keys.push(k);
         }
         const hello = state.hello[sh] !== 1;
-        if (hello) lines.unshift("下雨通知開通了，之後快下雨會提醒你");
         if (!lines.length) return;
         try {
-          await libs.push.sendNotification(s.sub, JSON.stringify({ title: "曬衣服嗎", body: lines.join("\n"), tag: "rain", url: site || "./" }),
+          await libs.push.sendNotification(s.sub, JSON.stringify({ title: "降雨提醒", body: lines.join("\n"), tag: "rain", url: site || "./" }),
             { TTL: 1800, urgency: "high", vapidDetails: { subject: site || "https://github.com", publicKey: s.pub, privateKey: s.priv } });
           keys.forEach(k => { state.sent[k] = now; });
           state.hello[sh] = 1; sent++;
@@ -968,7 +1008,7 @@ async function main() {
         try { await getJSON(PUSH_API.replace(/\/+$/, "") + "/prune", { method: "POST", headers: { Authorization: "Bearer " + PUSH_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify({ ids: dead }) }); }
         catch (e) { fail("清除失效訂閱", e); }
       }
-      status.seen.push = { subs: subs.length, sent, failed, removed: dead.length, quiet, digests };
+      status.seen.push = { subs: subs.length, sent, failed, removed: dead.length, quiet, digests, changes };
       await writeFile(OUT + "/push-state.json", JSON.stringify(state));
     } catch (e) { fail("下雨通知", e); }
   }
