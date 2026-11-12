@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="帶傘嗎">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Serif+TC:wght@600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Noto+Serif+TC:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 /* 版面想法：一欄四段，用細線分段不用卡片 — 現在、空氣、逐三小時、建議。 */
 :root {
@@ -29,8 +29,8 @@
   --cloth: #dbe6ea; --cloth2: #a9c0ca;    /* 衣物與雲的底色 */
   --tl: 38%;            /* 溫度色的明度 */
 
-  --display: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
-  --body: "LXGW WenKai TC", "Kaiti TC", "BiauKai", "DFKai-SB", "Noto Serif TC", serif;
+  --display: "Cormorant Garamond", "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --body: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
 
   /* 字級：16 起跳，比例 1.5 */
   --t0: 18px; --t1: 27px; --t3: 72px;
@@ -145,7 +145,7 @@ svg.ic .wet { stroke: var(--rain); }
 .now .read { display: flex; flex-direction: column; gap: 4px; }
 .duo { display: grid; grid-template-columns: auto auto; justify-content: start; gap: 40px; }
 .duo div { display: flex; flex-direction: column; gap: 4px; }
-.duo b { font-family: var(--display); font-weight: 600; font-size: 64px; line-height: 1; letter-spacing: -0.02em; }
+.duo b { font-family: var(--display); font-weight: 400; font-size: min(84px, 20vw); white-space: nowrap; line-height: .9; letter-spacing: -0.01em; }
 .meta { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s1) var(--s3); }
 .meta div { display: flex; justify-content: space-between; gap: var(--s1); }
 .meta span:last-child { font-weight: 600; text-align: right; }
