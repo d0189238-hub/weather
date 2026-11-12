@@ -305,7 +305,7 @@ main { touch-action: pan-y; }
 .player { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; }
 .player .btn { padding: 6px 12px; white-space: nowrap; }
 .player input { width: 100%; accent-color: var(--rain); }
-#r-time { font-family: var(--display); font-weight: 600; font-size: 20px; min-width: 52px; text-align: right; }
+#r-time, .ptime { font-family: var(--display); font-weight: 600; font-size: 20px; min-width: 52px; text-align: right; }
 .thumb { display: grid; grid-template-columns: 112px 1fr; gap: var(--s2); align-items: center; }
 .thumb img { width: 112px; height: 112px; object-fit: cover; border-radius: 6px; background: var(--cloth2); }
 .thumb .lines { display: flex; flex-direction: column; gap: 6px; }
@@ -621,6 +621,11 @@ main { touch-action: pan-y; }
   <section class="v-obs" id="o-sat" hidden>
     <div class="sat-h"><h2>衛星雲圖</h2><span class="sat-t" id="sat-tabs"></span></div>
     <a class="map" id="sat-link" target="_blank" rel="noopener"><img id="sat-img" alt="臺灣附近的衛星雲圖"></a>
+    <div class="player" id="s-player" hidden>
+      <button type="button" class="btn ghost" id="s-play" aria-label="播放衛星雲圖動畫">▶ 播放</button>
+      <input type="range" id="s-slider" min="0" max="0" step="1" value="0" aria-label="選擇雲圖時間">
+      <span class="ptime" id="s-time"></span>
+    </div>
     <span class="cap" id="sat-time"></span>
   </section>
   <section class="v-obs" id="o-rain" hidden>
@@ -1186,7 +1191,7 @@ function fromData(T, D) {
 /* ---------- 地點 ---------- */
 const pname = p => p.c + p.t;
 const seedOf = s => [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7);
-let TY = null, EQ = null, WARN = null, OB = null, satKind = "ir", rankKind = "hi", here = null;
+let TY = null, EQ = null, WARN = null, OB = null, satKind = null, rankKind = "hi", here = null;
 let places = [{ c: "臺北市", t: "中正區" }], active = 0, editing = false, liveOK = false;
 try {
   const saved = JSON.parse(store.get("places") || "null");
@@ -1662,15 +1667,25 @@ function drawObs() {
   }
   $("light-home").textContent = lightText || "雷達回波與觀測圖";
   show("obs-home", !!(M.radar || M.ir || M.vis || M.rain || M.temp || O));
-  // 衛星雲圖
-  const names = { ir: "紅外線", vis: "可見光" }, have = Object.keys(names).filter(k => M[k]);
-  show("o-sat", have.length > 0);
-  if (have.length) {
-    if (!M[satKind]) satKind = have[0];
-    const x = M[satKind];
-    $("sat-img").src = $("sat-link").href = "data/" + x.file + "?t=" + encodeURIComponent(x.time || "");
-    $("sat-time").textContent = (twTime(x.time) ? "觀測時間 " + twTime(x.time) + "・" : "") + (satKind === "vis" ? "可見光只有白天看得到，晚上請看紅外線" : "越白越亮的地方，雲越高越厚");
-    $("sat-tabs").innerHTML = have.length > 1 ? have.map(k => `<button type="button" class="${k === satKind ? "on" : ""}" data-k="${k}">${names[k]}</button>`).join("") : "";
+  // 衛星雲圖：優先用高解析動畫，沒有的話用開放資料的單張圖
+  const SL = OB.sat || {}, hiKeys = ["rgb", "ir"].filter(k => SL[k] && SL[k].frames && SL[k].frames.length);
+  if (hiKeys.length) {
+    show("o-sat", true);
+    const names = { rgb: "真實色", ir: "紅外線" };
+    if (!SL[satKind]) satKind = (here && isDayNow() && SL.rgb) ? "rgb" : hiKeys.includes("ir") ? "ir" : hiKeys[0];
+    $("sat-tabs").innerHTML = hiKeys.map(k => `<button type="button" class="${k === satKind ? "on" : ""}" data-k="${k}">${names[k]}</button>`).join("");
+    setSat(SL[satKind]);
+  } else {
+    $("s-player").hidden = true;
+    const names = { ir: "紅外線", vis: "可見光" }, have = Object.keys(names).filter(k => M[k]);
+    show("o-sat", have.length > 0);
+    if (have.length) {
+      if (!M[satKind]) satKind = have[0];
+      const x = M[satKind];
+      $("sat-img").src = $("sat-link").href = "data/" + x.file + "?t=" + encodeURIComponent(x.time || "");
+      $("sat-time").textContent = (twTime(x.time) ? "觀測時間 " + twTime(x.time) + "・" : "") + (satKind === "vis" ? "可見光只有白天看得到，晚上請看紅外線" : "越白越亮的地方，雲越高越厚");
+      $("sat-tabs").innerHTML = have.length > 1 ? have.map(k => `<button type="button" class="${k === satKind ? "on" : ""}" data-k="${k}">${names[k]}</button>`).join("") : "";
+    }
   }
   show("o-rain", !!M.rain); if (M.rain) { setImg("rain", M.rain); $("rain-cap").textContent = "從今天 0 點累積到 " + twTime(M.rain.time); }
   show("o-temp", !!M.temp); if (M.temp) { setImg("temp", M.temp); $("temp-cap").textContent = "觀測時間 " + twTime(M.temp.time); }
@@ -1732,6 +1747,33 @@ $("r-play").addEventListener("click", () => {
 });
 $("r-slider").addEventListener("input", e => { stopFrames(); showFrame(Number(e.target.value)); });
 
+/* 衛星雲圖動畫：最近 2 小時，每 10 分鐘一張；放大時看 2750 像素原圖 */
+let SF = [], sTimer = null, sIdx = 0, sLayer = null;
+const isDayNow = () => { const h = new Date(Date.now() + 8 * 3600e3).getUTCHours(); return h >= 7 && h < 17; };
+function showSat(i) {
+  sIdx = i; $("s-slider").value = i;
+  $("sat-img").src = "data/" + SF[i].file;
+  $("s-time").textContent = hm(SF[i].time);
+}
+function stopSat() { clearInterval(sTimer); sTimer = null; $("s-play").textContent = "▶ 播放"; }
+function setSat(layer) {
+  if (layer === sLayer && SF.length) return;
+  stopSat(); sLayer = layer; SF = layer.frames.slice();
+  SF.forEach(f => { const im = new Image(); im.src = "data/" + f.file; });
+  $("s-player").hidden = SF.length < 2;
+  $("s-slider").max = SF.length - 1;
+  showSat(SF.length - 1);
+  const full = layer.full ? "data/" + layer.full.file + "?t=" + encodeURIComponent(layer.full.time) : "data/" + SF[SF.length - 1].file;
+  $("sat-link").href = full;
+  $("sat-time").textContent = "最新 " + twTime(SF[SF.length - 1].time) + "・" + (satKind === "rgb" ? "白天的真實顏色，晚上會變暗，晚上請看紅外線。" : "顏色越亮、越偏紅紫，雲頂越高越冷，容易有強降雨。") + "點圖可以看高解析原圖。";
+}
+$("s-play").addEventListener("click", () => {
+  if (sTimer) { stopSat(); return; }
+  $("s-play").textContent = "⏸ 暫停";
+  sTimer = setInterval(() => showSat(sIdx >= SF.length - 1 ? 0 : sIdx + 1), 500);
+});
+$("s-slider").addEventListener("input", e => { stopSat(); showSat(Number(e.target.value)); });
+
 /* 放大檢視：兩指縮放、單指拖曳、點兩下切換 */
 (() => {
   const box = $("zoom"), img = $("zoom-img");
@@ -1785,11 +1827,11 @@ $("r-slider").addEventListener("input", e => { stopFrames(); showFrame(Number(e.
   }));
 })();
 $("rank-tabs").addEventListener("click", e => { const b = e.target.closest("[data-r]"); if (b) { rankKind = b.dataset.r; drawObs(); } });
-$("sat-tabs").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) { satKind = b.dataset.k; drawObs(); } });
+$("sat-tabs").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) { satKind = b.dataset.k; sLayer = null; drawObs(); } });
 async function loadObs() {
   const get = f => fetch("data/" + f, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null);
-  const [m, l, o, rf] = await Promise.all([get("maps.json"), get("lightning.json"), get("obs.json"), get("radar.json")]);
-  OB = { maps: m || {}, light: l, obs: o };
+  const [m, l, o, rf, sat] = await Promise.all([get("maps.json"), get("lightning.json"), get("obs.json"), get("radar.json"), get("sat.json")]);
+  OB = { maps: m || {}, light: l, obs: o, sat: sat || {} };
   drawObs();
   setFrames(rf && rf.frames || []);
 }

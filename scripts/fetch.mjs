@@ -278,19 +278,6 @@ async function main() {
     }
   }
   await writeFile(OUT + "/maps.json", JSON.stringify(maps));
-  if (process.env.SAT_DIAG) {
-    const out = {}, tw = new Date(Date.now() + 8 * 3600e3);
-    const slots = [20, 30, 40].map(m => { const d = new Date(Math.floor((tw.getTime() - m * 60e3) / 600e3) * 600e3); const p = n => String(n).padStart(2, "0"); return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}-${p(d.getUTCHours())}-${p(d.getUTCMinutes())}`; });
-    for (const prod of ["LCC_IR1_CR_2750", "LCC_TRGB_2750", "LCC_VIS_Gray_2750", "LCC_VIS_TRGB_2750", "LCC_IR1_MB_2750", "LCC_IR1_BW_2750", "LCC_IR1_CR_1000", "s1p_IR1_CR_2750"]) {
-      out[prod] = [];
-      for (const t of slots) {
-        const u = `https://www.cwa.gov.tw/Data/satellite/${prod}/${prod}-${t}.jpg`;
-        try { const h = await fetch(u, { method: "HEAD", signal: AbortSignal.timeout(15000) }); out[prod].push(t + " " + h.status + " " + (h.headers.get("content-length") || "")); }
-        catch (e) { out[prod].push(t + " ERR " + String(e.message || e).slice(0, 40)); }
-      }
-    }
-    status.seen.satDiag = out;
-  }
 
   // 閃電：過去 1 小時的閃電位置（KMZ 壓縮檔）
   const light = { time: null, pts: [], ok: false };
@@ -426,11 +413,67 @@ async function main() {
   }
   await writeFile(OUT + "/typhoon.json", JSON.stringify({ list: typhoons }));
 
-  // ---------- 雷達動畫：每次存一張縮小的雷達圖，保留最近 2 小時 ----------
   const libs = {};
   for (const [k, m] of [["png", "pngjs"], ["jpeg", "jpeg-js"], ["push", "web-push"]]) {
     try { const x = await import(m); libs[k] = x.default || x; } catch (e) { status.seen["lib-" + m] = "missing"; }
   }
+  // ---------- 衛星雲圖動畫（氣象署官網高解析圖，最近 2 小時，每 10 分鐘一張）----------
+  const satOut = {};
+  try {
+    let prev = {};
+    if (site) { try { const r = await fetch(site + "data/sat.json?t=" + Date.now(), { signal: AbortSignal.timeout(20000) }); if (r.ok) prev = await r.json(); } catch (e) {} }
+    await mkdir(OUT + "/sat", { recursive: true });
+    const p2 = n => String(n).padStart(2, "0");
+    const slotStr = ms => { const d = new Date(ms + 8 * 3600e3); return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}-${p2(d.getUTCHours())}-${p2(d.getUTCMinutes())}`; };
+    const slotIso = ms => { const d = new Date(ms + 8 * 3600e3); return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}T${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}:00+08:00`; };
+    const base = Math.floor(Date.now() / 600e3) * 600e3;
+    const slots = []; for (let k = 15; k >= 1; k--) slots.push(base - k * 600e3);
+    const shrink = buf => {
+      if (!libs.jpeg) return buf;
+      const src = libs.jpeg.decode(buf, { useTArray: true, maxMemoryUsageInMB: 1024 });
+      const S = Math.max(1, Math.ceil(src.width / 920)), w = Math.floor(src.width / S), h = Math.floor(src.height / S), out = Buffer.alloc(w * h * 4);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        let r = 0, g = 0, b = 0;
+        for (let dy = 0; dy < S; dy++) for (let dx = 0; dx < S; dx++) { const i = ((y * S + dy) * src.width + x * S + dx) * 4; r += src.data[i]; g += src.data[i + 1]; b += src.data[i + 2]; }
+        const o = (y * w + x) * 4, n = S * S; out[o] = r / n; out[o + 1] = g / n; out[o + 2] = b / n; out[o + 3] = 255;
+      }
+      return Buffer.from(libs.jpeg.encode({ data: out, width: w, height: h }, 74).data);
+    };
+    const cwa = (prod, t) => `https://www.cwa.gov.tw/Data/satellite/${prod}/${prod}-${t}.jpg`;
+    for (const [key, small, full] of [["ir", "LCC_IR1_CR_1000", "LCC_IR1_CR_2750"], ["rgb", "LCC_TRGB_2750", "LCC_TRGB_2750"]]) {
+      const have = {}; for (const f of (prev[key] && prev[key].frames) || []) have[f.time] = f;
+      const frames = [];
+      let made = 0;
+      for (const ms of slots) {
+        const iso = slotIso(ms), file = `sat/${key}-${Math.floor(ms / 60e3)}.jpg`;
+        try {
+          if (have[iso]) {
+            const r = await fetch(site + "data/" + have[iso].file, { signal: AbortSignal.timeout(20000) });
+            if (r.ok) { await writeFile(OUT + "/" + file, Buffer.from(await r.arrayBuffer())); frames.push({ file, time: iso }); continue; }
+          }
+          if (made >= 15) continue;
+          const r = await fetch(cwa(small, slotStr(ms)), { signal: AbortSignal.timeout(30000) });
+          if (!r.ok) continue;
+          await writeFile(OUT + "/" + file, shrink(Buffer.from(await r.arrayBuffer())));
+          frames.push({ file, time: iso }); made++;
+        } catch (e) {}
+      }
+      const keep = frames.slice(-12);
+      let fullFile = null;
+      const last = keep[keep.length - 1];
+      if (last) {
+        try {
+          const r = await fetch(cwa(full, slotStr(Date.parse(last.time))), { signal: AbortSignal.timeout(60000) });
+          if (r.ok) { fullFile = `sat/${key}-full.jpg`; await writeFile(OUT + "/" + fullFile, Buffer.from(await r.arrayBuffer())); }
+        } catch (e) {}
+      }
+      if (keep.length) satOut[key] = { frames: keep, full: fullFile ? { file: fullFile, time: last.time } : null };
+      status.seen["sat-" + key] = keep.length + " frames, new " + made + (fullFile ? ", full" : "");
+    }
+  } catch (e) { fail("衛星雲圖", e); }
+  await writeFile(OUT + "/sat.json", JSON.stringify(satOut));
+
+  // ---------- 雷達動畫：每次存一張縮小的雷達圖，保留最近 2 小時 ----------
   const radarFrames = { frames: [] };
   try {
     let prev = { frames: [] };
