@@ -1814,7 +1814,7 @@ async function tempComposite() {
   }
   try { return cv.toDataURL("image/jpeg", 0.9); } catch (e) { return null; }
 }
-const TEMP_FIRST = ["臺北", "基隆", "新竹", "臺中", "嘉義", "臺南", "高雄", "恆春", "臺東", "花蓮", "宜蘭", "日月潭", "阿里山", "玉山", "澎湖", "成功", "梧棲"];
+const TEMP_FIRST = ["臺北", "基隆", "新竹", "梧棲", "斗六", "埔里", "臺中", "臺南", "高雄", "恆春", "臺東", "花蓮", "宜蘭", "日月潭", "阿里山", "玉山", "澎湖", "成功"];
 function drawTempLabels(m, O) {
   const svg = $("temp-svg"), list = O && O.temps || [];
   if (!m.lon || !m.lat || !list.length) { svg.innerHTML = ""; $("temp-isl").textContent = ""; return; }
@@ -1918,10 +1918,7 @@ function drawObs() {
     }
   }
   show("o-rain", !!M.rain); if (M.rain) { setImg("rain", M.rain); $("rain-cap").textContent = "從今天 0 點累積到 " + twTime(M.rain.time); }
-  show("o-temp", !!(M.temp || (O && O.tall)));
-  if (M.temp) { setImg("temp", M.temp); drawTempLabels(M.temp, O); }
-  $("temp-cap").textContent = "觀測時間 " + twTime((O && O.time) || (M.temp && M.temp.time)) + "・用全臺氣象站的現在氣溫內插而成；深色標籤是你的地點，白色是主要城市。";
-  drawTempMap(O).catch(() => {});
+  show("o-temp", !!M.temp); if (M.temp) { setImg("temp", M.temp); $("temp-cap").textContent = "觀測時間 " + twTime(M.temp.time) + "・數字是各氣象站的現在氣溫"; drawTempLabels(M.temp, O); }
   // 紫外線
   const uv = O && O.uv ? O.uv : [];
   show("o-uv", uv.length > 0);
