@@ -6,7 +6,5 @@ jobs:
     steps:
       - run: |
           sleep 5
-          google-chrome --headless=new --no-sandbox --hide-scrollbars --window-size=420,900 --virtual-time-budget=20000 --screenshot=s.png "https://d0189238-hub.github.io/weather/?nocache=$RANDOM#obs" || true
-          cat > t.js <<'JS'
-          JS
+          google-chrome --headless=new --no-sandbox --hide-scrollbars --window-size=420,6000 --virtual-time-budget=20000 --screenshot=s.png "https://d0189238-hub.github.io/weather/?nocache=$RANDOM#obs" || true
           python3 -c "import base64;print('B64START');print(base64.b64encode(open('s.png','rb').read()).decode());print('B64END')"
