@@ -353,6 +353,10 @@ main { touch-action: pan-y; }
 #sm-legend .qbar i { width: 100%; height: 9px; border-radius: 0; margin: 0; }
 #sm-legend .qbar span:first-child i { border-radius: 5px 0 0 5px; } #sm-legend .qbar span:last-child i { border-radius: 0 5px 5px 0; }
 #sm-legend .qwords { display: grid; grid-template-columns: 4fr 1fr 2fr 2fr; width: 100%; font-size: 12px; color: var(--muted); }
+#sm-legend .tbar { width: 100%; height: 10px; border-radius: 5px; }
+#sm-legend .tnums { position: relative; width: 100%; height: 16px; font-size: 12px; color: var(--muted); }
+#sm-legend .tnums span { position: absolute; transform: translateX(-50%); }
+#sm-legend .qwords.tw { grid-template-columns: 12fr 4fr 8fr 7fr; }
 #sm-legend .qwords span { border-left: 1px solid var(--line); padding-left: 4px; }
 .eqbar { display: flex; align-items: center; gap: 10px; width: 100%; font: inherit; font-size: 16px; text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
 .eqbar[hidden] { display: none; }
@@ -2225,7 +2229,12 @@ async function loadSmall() {
   try {
     const [t, f, q] = await Promise.all([fetch("data/towns-topo.json").then(r => r.json()), fetch("data/fc.json", { cache: "no-cache" }).then(r => r.json()),
       fetch("data/qpf.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null)]);
-    const towns = topoFeatures(t, "towns").map(ft => ({ key: fcKey(ft.properties), geom: ft.geometry }));
+    const towns = topoFeatures(t, "towns").map(ft => {
+      const g = ft.geometry, polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+      let best = null; for (const poly of polys) if (!best || poly[0].length > best.length) best = poly[0];
+      let cx = 0, cy = 0; best.forEach(p => { cx += p[0]; cy += p[1]; });
+      return { key: fcKey(ft.properties), geom: g, c: [cx / best.length, cy / best.length] };
+    });
     const counties = t.objects.counties ? topoFeatures(t, "counties").map(ft => ft.geometry) : [];
     if (q && q.periods) q.periods.forEach(p => { const b = atob(p.g), a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); p.cells = a; });
     SM = { towns, counties, fc: f, qpf: q && q.periods && q.periods.length ? q : null };
@@ -2238,29 +2247,64 @@ const QPF_LO = [0, 0.5, 1, 2, 5, 10, 15, 20, 30, 40, 50, 70, 90, 110, 130, 150, 
 const QPF_SHOW = [[0.5, [170, 228, 255]], [2, [70, 190, 255]], [5, [30, 135, 255]], [10, [25, 85, 225]], [20, [40, 190, 80]], [40, [255, 210, 0]], [70, [255, 125, 0]], [130, [225, 35, 30]], [200, [180, 20, 170]]];
 const qpfRGB = c => { if (!c) return null; const mm = QPF_LO[c]; let col = null; for (const [v, k] of QPF_SHOW) if (mm >= v) col = k; return col; };
 const qpfCol = c => { const k = qpfRGB(c); return k ? `rgb(${k})` : null; };
+// 溫度：連續色階，冷＝藍、舒服＝淡、熱＝橘紅
+const TSHOW = [[4, [49, 54, 149]], [8, [69, 117, 180]], [12, [116, 173, 209]], [16, [171, 217, 233]], [19, [224, 243, 236]], [22, [254, 240, 180]], [25, [253, 200, 110]], [28, [248, 141, 82]], [31, [221, 61, 45]], [35, [150, 20, 50]]];
+const tRGB = t => { if (t == null) return null; if (t <= TSHOW[0][0]) return TSHOW[0][1]; for (let i = 1; i < TSHOW.length; i++) if (t <= TSHOW[i][0]) { const [a, ca] = TSHOW[i - 1], [b, cb] = TSHOW[i], f = (t - a) / (b - a); return ca.map((v, j) => Math.round(v + (cb[j] - v) * f)); } return TSHOW[TSHOW.length - 1][1]; };
+// 鄉鎮中心點 → 細格子（每格取最近 6 個鄉鎮距離加權），只算一次
+function tempWeights(towns, G) {
+  if (SM.tw) return SM.tw;
+  const pts = towns.map((t, i) => [t.c[0], t.c[1], i]), k = Math.cos(23.6 * Math.PI / 180), W = [];
+  for (let gy = 0; gy < G.Y; gy++) for (let gx = 0; gx < G.X; gx++) {
+    const lon = G.lon0 + (gx + 0.5) * G.res, lat = G.lat0 + (gy + 0.5) * G.res, near = [];
+    for (const p of pts) { const d = ((p[0] - lon) * k) ** 2 + (p[1] - lat) ** 2; if (near.length < 6) { near.push([d, p[2]]); near.sort((a, b) => a[0] - b[0]); } else if (d < near[5][0]) { near[5] = [d, p[2]]; near.sort((a, b) => a[0] - b[0]); } }
+    W.push(near.map(([d, i]) => [i, 1 / (d + 1e-5)]));
+  }
+  return (SM.tw = W);
+}
 const qpfAt = (q, p, lat, lon) => { const gx = Math.floor((lon - q.lon0) / q.res), gy = Math.floor((lat - q.lat0) / q.res); if (gx < 0 || gy < 0 || gx >= q.X || gy >= q.Y) return null; let m = 0; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const y = gy + a, x = gx + b; if (x >= 0 && y >= 0 && x < q.X && y < q.Y) m = Math.max(m, p.cells[y * q.X + x]); } return m; };
-const twH = ms => { const t = new Date(ms + 8 * 3600e3), h = t.getUTCHours(), d = Math.round((Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) - Math.floor((Date.now() + 8 * 3600e3) / 864e5) * 864e5) / 864e5);
-  const day = d === 0 ? (h >= 18 ? "今晚" : h < 12 ? "今早" : "今天") : d === 1 ? (h >= 18 ? "明晚" : h < 12 ? "明早" : "明天") : d === 2 ? (h >= 18 ? "後天晚上" : h < 12 ? "後天早上" : "後天") : (t.getUTCMonth() + 1) + "/" + t.getUTCDate();
-  return day + " " + (h > 12 ? h - 12 : h) + " 點"; };
+const twH = ms => {
+  const t = new Date(ms + 8 * 3600e3), h = t.getUTCHours(), d = Math.round((Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) - Math.floor((Date.now() + 8 * 3600e3) / 864e5) * 864e5) / 864e5);
+  const part = h < 5 ? "凌晨" : h < 11 ? "早上" : h < 13 ? "中午" : h < 18 ? "下午" : "晚上";
+  const day = (d === 0 ? "今天" : d === 1 ? "明天" : d === 2 ? "後天" : (t.getUTCMonth() + 1) + "/" + t.getUTCDate() + " ") + part;
+  const short = { 今天早上: "今早", 今天晚上: "今晚", 明天早上: "明早", 明天晚上: "明晚" }[day] || day;
+  return short + " " + (h > 12 ? h - 12 : h) + " 點";
+};
 function drawSmall() {
   if (!SM) return;
-  const box = $("sm-grid"), fc = SM.fc, Q = smKind === "rain" ? SM.qpf : null;
+  const box = $("sm-grid"), fc = SM.fc, Q = smKind === "rain" ? SM.qpf : null, TM = smKind === "temp";
   if (smKind === "rain" && !Q) { smKind = "pop"; }
   const idx = Q ? Q.periods.map((p, i) => i).slice(0, 4) : [0, 2, 4, 6].filter(i => i < fc.times.length);
-  $("sm-title").textContent = Q ? "未來 48 小時雨量" : "未來 24 小時";
-  $("sm-cap").textContent = Q ? "每張是那 12 小時內預計會下的總雨量（毫米），白點是你選的地點。資料：氣象署定量降水預報，點地圖看原圖。" : "每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。";
+  $("sm-title").textContent = Q ? "未來 48 小時雨量" : TM ? "未來 24 小時氣溫" : "未來 24 小時";
+  $("sm-cap").textContent = Q ? "每張是那 12 小時內預計會下的總雨量（毫米），白點是你選的地點。資料：氣象署定量降水預報，點地圖看原圖。" : TM ? "每 6 小時一張，依氣象署全臺鄉鎮預報的氣溫畫成，白點是你選的地點。" : "每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。";
   const lo0 = 119.95, lo1 = 122.05, la0 = 21.87, la1 = 25.33, k = Math.cos(23.6 * Math.PI / 180);
   const cw = Math.floor((box.clientWidth - 10) / 2) || 160, ch = Math.round(cw * (la1 - la0) / ((lo1 - lo0) * k));
   const dpr = Math.min(3, window.devicePixelRatio || 1), sx = cw / (lo1 - lo0), sy = ch / (la1 - la0);
   const P = ([x, y]) => [(x - lo0) * sx, (la1 - y) * sy];
   const path = (ctx, g) => { const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates; ctx.beginPath(); for (const poly of polys) for (const ring of poly) ring.forEach((p, i) => { const [x, y] = P(p); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); };
   const dark = document.documentElement.dataset.sky === "night";
-  box.innerHTML = idx.map((i, n) => `<figure class="smf"${Q ? ` data-img="data/${Q.periods[i].img}"` : ""}><figcaption${Q ? ' class="rng"' : ""}>${Q ? twH(Date.parse(Q.periods[i].from)).replace(/ \d+ 點$/, "") + " → " + twH(Date.parse(Q.periods[i].to)).replace(/ \d+ 點$/, "") : fcLabel(i)}</figcaption><canvas width="${cw * dpr}" height="${ch * dpr}" style="width:${cw}px;height:${ch}px"></canvas><div class="sm-isl" data-n="${n}"></div></figure>`).join("");
-  const pl0 = places[active] ? pname(places[active]).replace(/^(.{2,3}[縣市])/, "") : "你這裡";
+  box.innerHTML = idx.map((i, n) => `<figure class="smf"${Q ? ` data-img="data/${Q.periods[i].img}"` : ""}><figcaption${Q || TM ? ' class="rng"' : ""}>${Q ? twH(Date.parse(Q.periods[i].from)).replace(/ \d+ 點$/, "") + " → " + twH(Date.parse(Q.periods[i].to)).replace(/ \d+ 點$/, "") : TM ? twH(Date.parse(fc.times[i])) : fcLabel(i)}</figcaption><canvas width="${cw * dpr}" height="${ch * dpr}" style="width:${cw}px;height:${ch}px"></canvas><div class="sm-isl" data-n="${n}"></div></figure>`).join("");
+  const pl = places[active], pl0 = places[active] ? pname(places[active]).replace(/^(.{2,3}[縣市])/, "") : "你這裡";
   box.querySelectorAll("canvas").forEach((cv, n) => {
     const ctx = cv.getContext("2d"), i = idx[n];
     ctx.scale(dpr, dpr);
-    if (Q) {
+    if (TM) {
+      // 溫度：鄉鎮預報內插成平滑的一片
+      const G = { lon0: 119.95, lat0: 21.87, res: 0.02, X: 105, Y: 173 }, W = tempWeights(SM.towns, G);
+      const vals = SM.towns.map(t => { const v = fc.towns[t.key]; return v && v[i] && v[i][2] != null ? v[i][2] : null; });
+      ctx.beginPath();
+      for (const t of SM.towns) { const polys = t.geom.type === "Polygon" ? [t.geom.coordinates] : t.geom.coordinates; for (const poly of polys) for (const ring of poly) ring.forEach((p, j) => { const [x, y] = P(p); j ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); }
+      ctx.fillStyle = dark ? "#353f4c" : "#e6e9ec"; ctx.fill("nonzero");
+      ctx.save(); ctx.clip("nonzero");
+      const off = document.createElement("canvas"); off.width = G.X; off.height = G.Y;
+      const oc = off.getContext("2d"), im = oc.createImageData(G.X, G.Y);
+      W.forEach((ws, c) => { let a = 0, b = 0; for (const [ti, w] of ws) if (vals[ti] != null) { a += w * vals[ti]; b += w; } if (!b) return; const rgb = tRGB(a / b), gx = c % G.X, gy = Math.floor(c / G.X), o = ((G.Y - 1 - gy) * G.X + gx) * 4; im.data[o] = rgb[0]; im.data[o + 1] = rgb[1]; im.data[o + 2] = rgb[2]; im.data[o + 3] = 255; });
+      oc.putImageData(im, 0, 0);
+      const [x0, y0] = P([G.lon0, G.lat0 + G.Y * G.res]), [x1, y1] = P([G.lon0 + G.X * G.res, G.lat0]);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(off, x0, y0, x1 - x0, y1 - y0);
+      ctx.restore();
+    }
+    else if (Q) {
       // 陸地底色 → 雨量（先畫成小圖再平滑放大，邊緣柔和、沒有格線）→ 縣市界 → 你的地點
       const P0 = Q.periods[i];
       ctx.beginPath();
@@ -2284,17 +2328,18 @@ function drawSmall() {
       path(ctx, t.geom); ctx.fillStyle = col || (dark ? "#2a3340" : "#e9ecef"); ctx.fill("evenodd");
       ctx.strokeStyle = dark ? "rgba(0,0,0,.25)" : "rgba(255,255,255,.7)"; ctx.lineWidth = 0.4; ctx.stroke();
     }
-    ctx.strokeStyle = Q ? (dark ? "rgba(255,255,255,.22)" : "rgba(40,50,60,.3)") : dark ? "rgba(255,255,255,.55)" : "rgba(40,50,60,.55)"; ctx.lineWidth = Q ? 0.6 : 0.8;
+    ctx.strokeStyle = Q || TM ? (dark ? "rgba(255,255,255,.22)" : "rgba(40,50,60,.3)") : dark ? "rgba(255,255,255,.55)" : "rgba(40,50,60,.55)"; ctx.lineWidth = Q || TM ? 0.6 : 0.8;
     for (const g of SM.counties) { path(ctx, g); ctx.stroke(); }
-    if (Q && here) { const [x, y] = P([here.lon, here.lat]); ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#111"; ctx.stroke(); }
+    if ((Q || TM) && here) { const [x, y] = P([here.lon, here.lat]); ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#111"; ctx.stroke(); }
     // 金門、馬祖不在圖內，用小圓點表示
     const isl = [["金門", "金門縣|金城鎮"], ["馬祖", "連江縣|南竿鄉"]].map(([nm, key]) => { const v = fc.towns[key], col = smColor(v && v[i]); return `<span><i style="background:${col || "transparent"}"></i>${nm}</span>`; }).join("");
     let mine = "";
     if (Q && here) { const c = qpfAt(Q, Q.periods[i], here.lat, here.lon) || 0, rgb = qpfRGB(c); mine = `<span class="mine"><i style="background:${rgb ? `rgb(${rgb})` : "transparent"}"></i>${pl0}　${c ? (QPF_LO[c] < 1 ? "不到 " + QPF_HI[c] : QPF_LO[c] + "～" + QPF_HI[c]) + " 毫米" : "不會下雨"}</span>`; }
-    box.querySelector(`.sm-isl[data-n="${n}"]`).innerHTML = Q ? mine : isl;
+    if (TM && pl) { const v = fc.towns[pl.c + "|" + pl.t], tv = v && v[i] ? v[i][2] : null, rgb = tRGB(tv); mine = tv == null ? "" : `<span class="mine"><i style="background:rgb(${rgb})"></i>${pl0}　${Math.round(tv)}°</span>`; }
+    box.querySelector(`.sm-isl[data-n="${n}"]`).innerHTML = Q || TM ? mine : isl;
   });
   // 你的地點：48 小時大約會下多少
-  const me = $("sm-me"), pl = places[active];
+  const me = $("sm-me");
   me.hidden = !(Q && here);
   if (Q && here) {
     let lo = 0, hi = 0, parts = [];
@@ -2302,7 +2347,7 @@ function drawSmall() {
     const nm = pl ? pname(pl) : "你的地點";
     me.innerHTML = hi < 0.5 ? `<b>${nm}</b>　未來 48 小時預計不會下雨` : `<b>${nm}</b>　未來 48 小時預計累積 <em>${lo < 1 ? "不到 " + Math.ceil(hi) : Math.round(lo) + "～" + Math.round(hi)}</em> 毫米`;
   }
-  $("sm-legend").innerHTML = Q ? `<div class="qbar">${QPF_SHOW.map(([v, c]) => `<span><i style="background:rgb(${c})"></i>${v}</span>`).join("")}</div><div class="qwords"><span>小雨</span><span>中雨</span><span>大雨</span><span>豪雨</span></div>` : smKind === "wx"
+  $("sm-legend").innerHTML = TM ? `<div class="tbar" style="background:linear-gradient(90deg,${TSHOW.map(([v, c]) => `rgb(${c}) ${(v - 4) / 31 * 100}%`).join(",")})"></div><div class="tnums">${[5, 10, 15, 20, 25, 30, 35].map(v => `<span style="left:${(v - 4) / 31 * 100}%">${v}°</span>`).join("")}</div><div class="qwords tw"><span>冷</span><span>涼</span><span>舒服</span><span>熱</span></div>` : Q ? `<div class="qbar">${QPF_SHOW.map(([v, c]) => `<span><i style="background:rgb(${c})"></i>${v}</span>`).join("")}</div><div class="qwords"><span>小雨</span><span>中雨</span><span>大雨</span><span>豪雨</span></div>` : smKind === "wx"
     ? Object.entries(WXCOL).map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join("")
     : smKind === "pop" ? [[20, "20%"], [30, "30%"], [40, "40%"], [60, "60%"], [80, "80%+"]].map(([p, l]) => `<span><i style="background:${POPCOL(p)}"></i>${l}</span>`).join("")
     : [[5, "5°"], [10, "10°"], [15, "15°"], [20, "20°"], [25, "25°"], [30, "30°"], [35, "35°"]].map(([t, l]) => `<span><i style="background:${smTempCol(t)}"></i>${l}</span>`).join("");
