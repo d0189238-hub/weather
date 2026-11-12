@@ -1,9 +1,0 @@
-name: 截圖檢查
-on: workflow_dispatch
-jobs:
-  shot:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          curl -sL -m 30 -o t.json "https://d0189238-hub.github.io/weather/data/towns-topo.json"; wc -c t.json; gzip -9 t.json
-          echo "B64START"; base64 -w 2000 t.json.gz; echo "B64END"
