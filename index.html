@@ -183,7 +183,25 @@ svg.ic .wet { stroke: var(--rain); }
 .ty-r10 { fill: none; stroke: var(--bad); stroke-width: 1; }
 .ty-eye { fill: var(--bad); stroke: #fff; stroke-width: 1.5; }
 .ty-me { fill: var(--ink); stroke: var(--paper); stroke-width: 1.5; }
-.ty-map svg { width: 100%; height: auto; display: block; }
+.ty-map svg, .ty-fallback svg { width: 100%; height: auto; display: block; }
+.ty-lmap.on { height: min(70vh, 440px); border-radius: 8px; overflow: hidden; background: #0d2233; }
+.ty-lmap .ty-tiles { filter: brightness(.72) saturate(.8); }
+.ty-ic svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+.ty-ic .body { fill: #e0412b; } .ty-ic .eye { fill: #ffd400; } .ty-ic path { fill: #e0412b; }
+.ty-ic .wk .body, .ty-ic .wk path { fill: #8a8f96; }
+.leaflet-tooltip.ty-tt { background: none; border: 0; box-shadow: none; padding: 0; color: #fff; font-family: "Noto Sans TC", sans-serif; font-weight: 700; font-size: 15px; line-height: 1.15; text-align: center; text-shadow: 0 0 3px #000, 0 0 6px #000; }
+.leaflet-tooltip.ty-tt b { display: block; font-size: 16px; }
+.leaflet-tooltip.ty-tt.sm { font-size: 12px; font-weight: 500; }
+.leaflet-tooltip.ty-tt::before { display: none; }
+.ty-key { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+.ty-key span { display: inline-flex; align-items: center; gap: 6px; }
+.ty-key i { display: inline-block; width: 18px; height: 10px; border-radius: 3px; }
+.ty-key .k-past { height: 3px; background: #9aa3ad; }
+.ty-key .k-fc { height: 0; border-top: 3px dashed #e6b800; border-radius: 0; }
+.ty-key .k-cone { background: rgba(140,150,160,.45); }
+.ty-key .k-r7 { background: rgba(255,212,0,.45); border: 1.5px solid #e6c200; width: 12px; height: 12px; border-radius: 50%; }
+.ty-key .k-r10 { background: rgba(255,59,48,.45); border: 1.5px solid #ff5a3c; width: 12px; height: 12px; border-radius: 50%; }
+.ty-key .k-me { background: #2f80ed; border: 2px solid #fff; box-shadow: 0 0 0 1px #9aa3ad; width: 10px; height: 10px; border-radius: 50%; }
 .ty-block { display: flex; flex-direction: column; gap: 10px; }
 .ty-list, .eq-list { list-style: none; margin: 0; padding: 0; }
 .ty-list li { display: grid; grid-template-columns: 1fr 1.2fr auto; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 17px; }
@@ -1261,7 +1279,7 @@ const pname = p => p.c + p.t;
 const seedOf = s => [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7);
 let FC = null, FCGEO = null, fcKind = "wx", fcIdx = 0, fcTimer = null, SM = null, smKind = "wx";
 let LLAB = null, TC = null, LMEL = null, LEQ = null, LFAULT = null, eqMarks = {};
-let NC = null, LMAP = null, LOV = null, LBASE = {}, LMARK = null, RG = null, rgMode = false, baseKind = "photo";
+let NC = null, TYMAPS = [], LMAP = null, LOV = null, LBASE = {}, LMARK = null, RG = null, rgMode = false, baseKind = "photo";
 let TY = null, EQ = null, WARN = null, OB = null, satKind = null, rankKind = "hi", here = null;
 let places = [{ c: "臺北市", t: "中正區" }], active = 0, editing = false, liveOK = false;
 try {
@@ -1381,7 +1399,7 @@ function setView(v) {
   $("app").dataset.view = v;
   if (v !== "home") $("sub-title").textContent = pname(places[active]) + "・" + VIEWS[v];
   window.scrollTo(0, 0);
-  if (v === "obs" && typeof ensureMap === "function") { ensureMap(); showSmall(); }
+  if (v === "obs" && typeof ensureMap === "function") { ensureMap(); showSmall(); drawTyMaps(); }
 }
 function go(v) { try { location.hash = v === "home" ? "" : v; } catch (e) {} setView(v); }
 window.addEventListener("hashchange", () => setView(location.hash.slice(1)));
@@ -1618,6 +1636,55 @@ function tyMap(t, h, W, H, small) {
   if (h) s += `<circle class="ty-me" cx="${X(h.lon).toFixed(1)}" cy="${Y(h.lat).toFixed(1)}" r="${small ? 3 : 4}"/>`;
   return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${t.name}颱風路徑示意圖">${s}</svg>`;
 }
+/* 颱風路徑地圖：衛星底圖＋走過的路徑、預測路徑、70% 機率範圍、暴風圈 */
+const TY_ICON = (big, wk) => L.divIcon({ className: "ty-ic", iconSize: [big ? 44 : 26, big ? 44 : 26], iconAnchor: [big ? 22 : 13, big ? 22 : 13],
+  html: `<svg viewBox="-13 -13 26 26" class="${wk ? "wk" : ""}"><path d="M-1-7.2C5-8.5 10.5-5.5 12 1 8.5-3 4.5-4.2 1-3.6Z"/><path d="M-1-7.2C5-8.5 10.5-5.5 12 1 8.5-3 4.5-4.2 1-3.6Z" transform="rotate(180)"/><circle r="7" class="body"/><circle r="3" class="eye"/></svg>` });
+const tyHourTxt = ms => { const t = new Date(ms + 8 * 3600e3); return `${t.getUTCDate()}日${t.getUTCHours()}時`; };
+function coneParts(pts) {
+  // 每兩個預測點的圓做外切多邊形，合起來就是「可能經過的範圍」
+  const out = [], ring = (p, r, a0, a1) => { const res = [], k = Math.cos(p.lat * Math.PI / 180); for (let a = a0; a <= a1 + 1e-6; a += Math.PI / 18) res.push([p.lat + r / 111 * Math.sin(a), p.lon + r / 111 / k * Math.cos(a)]); return res; };
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1], ra = Math.max(1, a.r || 0), rb = Math.max(1, b.r || 0);
+    const k = Math.cos(a.lat * Math.PI / 180), dx = (b.lon - a.lon) * 111 * k, dy = (b.lat - a.lat) * 111, d = Math.hypot(dx, dy);
+    if (d < 1 || d <= Math.abs(rb - ra)) { out.push(ring(rb > ra ? b : a, Math.max(ra, rb), 0, 2 * Math.PI)); continue; }
+    const th = Math.atan2(dy, dx), al = Math.acos((ra - rb) / d);
+    out.push([...ring(a, ra, th + al, th + 2 * Math.PI - al), ...ring(b, rb, th - al, th + al)]);
+  }
+  const last = pts[pts.length - 1]; if (last && last.r) out.push(ring(last, last.r, 0, 2 * Math.PI));
+  return out;
+}
+async function drawTyMaps() {
+  const boxes = [...document.querySelectorAll(".ty-lmap[data-ti]")].filter(b => !b._map);
+  if (!boxes.length || !TY) return;
+  try { await loadLeaflet(); } catch (e) { return; }
+  const h = here;
+  boxes.forEach(box => {
+    const t = TY.list[Number(box.dataset.ti)]; if (!t || box._map || !box.isConnected) return;
+    box.innerHTML = ""; box.classList.add("on");
+    const m = L.map(box, { minZoom: 3, maxZoom: 10, zoomSnap: 0.5, attributionControl: true, worldCopyJump: false });
+    box._map = m; TYMAPS.push(m);
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 10, className: "ty-tiles", attribution: "衛星底圖 Esri｜颱風 中央氣象署" }).addTo(m);
+    m.createPane("cone"); m.getPane("cone").style.opacity = 0.28; m.getPane("cone").style.zIndex = 390;
+    const tr = tyTrack(t), c = tr[0], fcPts = [{ ...c, r: 0 }, ...tr.slice(1).map(f => ({ ...f, r: f.prob || 0 }))];
+    if (fcPts.length > 1) coneParts(fcPts).forEach(poly => L.polygon(poly, { pane: "cone", stroke: false, fillColor: "#fff", fillOpacity: 1, interactive: false }).addTo(m));
+    if (c && c.r7) L.circle([c.lat, c.lon], { radius: c.r7 * 1000, color: "#ffe14d", weight: 2, fillColor: "#ffd400", fillOpacity: 0.22, interactive: false }).addTo(m);
+    if (c && c.r10) L.circle([c.lat, c.lon], { radius: c.r10 * 1000, color: "#ff5a3c", weight: 2, fillColor: "#ff3b30", fillOpacity: 0.25, interactive: false }).addTo(m);
+    if (t.past.length > 1) L.polyline(t.past.map(p => [p.lat, p.lon]), { color: "#fff", weight: 3, opacity: 0.9, interactive: false }).addTo(m);
+    if (tr.length > 1) L.polyline(tr.map(p => [p.lat, p.lon]), { color: "#ffd400", weight: 2.5, dashArray: "7 6", interactive: false }).addTo(m);
+    tr.slice(1).forEach(f => {
+      L.marker([f.lat, f.lon], { icon: TY_ICON(false, tyLevel(f.wind) === "熱帶性低氣壓"), interactive: false }).addTo(m)
+        .bindTooltip(tyHourTxt(tms(f.t)), { permanent: true, direction: "right", offset: [12, 0], className: "ty-tt sm" });
+    });
+    if (c) L.marker([c.lat, c.lon], { icon: TY_ICON(true, false), interactive: false, zIndexOffset: 500 }).addTo(m)
+      .bindTooltip(`<b>${t.name}</b>${tyHourTxt(tms(c.t))}`, { permanent: true, direction: "bottom", offset: [0, 18], className: "ty-tt" });
+    if (h) L.circleMarker([h.lat, h.lon], { radius: 6, color: "#fff", weight: 2.5, fillColor: "#2f80ed", fillOpacity: 1, interactive: false }).addTo(m);
+    const all = t.past.concat(t.fc).map(p => [p.lat, p.lon]);
+    if (h) all.push([h.lat, h.lon]);
+    all.push([21.9, 120.0], [25.3, 122.0]);
+    m.fitBounds(L.latLngBounds(all), { padding: [24, 24] });
+    setTimeout(() => m.invalidateSize(), 60);
+  });
+}
 const EQC = l => l >= 7 ? ["#4a148c", "#fff"] : l >= 6.5 ? ["#6a1b9a", "#fff"] : l >= 6 ? ["#9c27b0", "#fff"] : l >= 5.5 ? ["#c62828", "#fff"] : l >= 5 ? ["#e0412b", "#fff"] : l >= 4 ? ["#f08a24", "#1c2a33"] : l >= 3 ? ["#f6c142", "#1c2a33"] : l >= 2 ? ["#f2e86d", "#1c2a33"] : l >= 1 ? ["#c7e9c0", "#1c2a33"] : ["var(--cloth)", "var(--muted)"];
 const eqLvl = v => { const m = String(v || "").match(/(\d)\s*級?\s*(弱|強)?/); return m ? Number(m[1]) + (m[2] === "強" ? .5 : 0) : 0; };
 const eqTxt = v => { const m = String(v || "").match(/(\d)\s*級?\s*(弱|強)?/); return m ? m[1] + (m[2] || "") + " 級" : "—"; };
@@ -1648,12 +1715,14 @@ function drawTyEq() {
     const tr = tyTrack(t), nearI = cl && cl.ahead ? tr.reduce((bi, f, i) => Math.abs(tms(f.t) - cl.ms) < Math.abs(tms(tr[bi].t) - cl.ms) ? i : bi, 0) : -1;
     const rows = tr.map((f, i) => { const d = h ? Math.round(kmTo(h.lat, h.lon, f.lat, f.lon)) : null;
       return `<li class="${i === nearI ? "near" : ""}"><span>${i === 0 ? "現在" : twWhen(tms(f.t))}</span><span>${tyLevel(f.wind).replace("颱風", "")}${f.wind ? `・${Math.round(f.wind)} m/s` : ""}</span><b>${d == null ? "" : d + " 公里"}</b></li>`; }).join("");
-    obsTy += `<div class="ty-block">${head}<p class="ty-msg">${msg}</p>${warn}<div class="ty-map">${tyMap(t, h, 340, 300, false)}</div>
-      <p class="cap">實線是走過的路徑，虛線是預測路徑，淡色圓圈是 70% 機率會經過的範圍；紅色虛線圈是七級風暴風圈，黑點是你選的地點。示意圖的海岸線是簡化過的。</p>
+    obsTy += `<div class="ty-block">${head}<p class="ty-msg">${msg}</p>${warn}<div class="ty-lmap" data-ti="${tys.indexOf(t)}"><div class="ty-fallback">${tyMap(t, h, 340, 300, false)}</div></div>
+      <div class="ty-key"><span><i class="k-past"></i>走過的路徑</span><span><i class="k-fc"></i>預測路徑</span><span><i class="k-cone"></i>70% 機率範圍</span><span><i class="k-r7"></i>七級風暴風圈</span><span><i class="k-r10"></i>十級風</span><span><i class="k-me"></i>你的地點</span></div>
       <ol class="ty-list"><li class="hd"><span>時間</span><span>強度</span><b>離你</b></li>${rows}</ol></div>`;
   });
   $("ty-home").innerHTML = homeTy; $("ty-home").hidden = !homeTy;
+  TYMAPS.forEach(m => m.remove()); TYMAPS = [];
   $("o-ty").hidden = !obsTy; $("ty-body").innerHTML = obsTy;
+  if (obsTy && $("app").dataset.view === "obs") drawTyMaps();
   // 地震
   const qs = EQ && EQ.list || [];
   let homeEq = "";
