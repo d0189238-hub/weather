@@ -278,19 +278,6 @@ async function main() {
     }
   }
   await writeFile(OUT + "/maps.json", JSON.stringify(maps));
-  // 驗算溫度圖的座標：測站應落在有顏色的陸地上，外海點應是空白
-  try {
-    const jl = await import("jpeg-js"), J = jl.default || jl;
-    if (maps.temp && maps.temp.lon && maps.temp.lat && /\.jpg$/.test(maps.temp.file)) {
-      const { readFile } = await import("node:fs/promises");
-      const im = J.decode(await readFile(OUT + "/" + maps.temp.file), { useTArray: true });
-      const [lo0, lo1] = maps.temp.lon, [la0, la1] = maps.temp.lat;
-      const px = (lat, lon) => { const x = Math.round((lon - lo0) / (lo1 - lo0) * (im.width - 1)), y = Math.round((la1 - lat) / (la1 - la0) * (im.height - 1)); const i = (y * im.width + x) * 4; const r = im.data[i], g = im.data[i + 1], b = im.data[i + 2]; return [r, g, b]; };
-      const land = [[25.04, 121.51], [24.15, 120.68], [22.99, 120.2], [22.63, 120.3], [23.98, 121.6], [22.75, 121.15], [24.76, 121.75], [23.5, 120.45], [24.8, 120.97], [22.0, 120.74]];
-      const sea = [[24.0, 122.6], [22.5, 119.6], [25.6, 120.0], [21.8, 121.6], [25.5, 122.5]];
-      status.seen.tempCheck = { size: [im.width, im.height], land: land.map(p => px(...p).join(",")), sea: sea.map(p => px(...p).join(",")) };
-    }
-  } catch (e) { status.seen.tempCheck = String(e.message || e).slice(0, 80); }
   status.seen.mapBounds = Object.fromEntries(Object.entries(maps).map(([k, v]) => [k, [v.id, v.lon, v.lat]]));
 
   // 閃電：過去 1 小時的閃電位置（KMZ 壓縮檔）
