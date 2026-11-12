@@ -302,6 +302,12 @@ main { touch-action: pan-y; }
 .map .me { fill: none; stroke: #111; stroke-width: 5; }
 .map .me2 { fill: #fff; stroke: #111; stroke-width: 3; }
 .cap { font-size: 16px; color: var(--muted); }
+.lmap { position: relative; height: min(68vh, 480px); border-radius: 8px; overflow: hidden; background: #a9cbdc; z-index: 0; }
+.lmap[hidden] { display: none; }
+.lmap .rgov { image-rendering: pixelated; image-rendering: crisp-edges; }
+.lme { position: absolute; top: 10px; right: 10px; z-index: 1000; font: inherit; font-size: 15px; padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(0,0,0,.25); background: rgba(255,255,255,.92); color: #1c2a33; cursor: pointer; }
+.leaflet-container { font: inherit; }
+.leaflet-control-attribution { font-size: 11px; }
 .player { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; }
 .player .btn { padding: 6px 12px; white-space: nowrap; }
 .player input { width: 100%; accent-color: var(--rain); }
@@ -608,7 +614,8 @@ main { touch-action: pan-y; }
     <div id="ty-body"></div>
   </section>
   <section class="v-obs" id="o-radar" hidden>
-    <h2>雷達回波・閃電</h2>
+    <div class="sat-h"><h2>雷達回波・閃電</h2><span class="sat-t" id="base-tabs" hidden><button type="button" class="on" data-b="photo">衛星</button><button type="button" data-b="map">地圖</button></span></div>
+    <div class="lmap" id="rmap" hidden><button type="button" class="lme" id="rmap-me">◎ 我的位置</button></div>
     <a class="map" id="radar-link" target="_blank" rel="noopener"><img id="radar-img" alt="雷達整合回波圖，疊上過去一小時的閃電位置"><svg id="radar-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true"></svg></a>
     <div class="player" id="r-player" hidden>
       <button type="button" class="btn ghost" id="r-play" aria-label="播放雷達動畫">▶ 播放</button>
@@ -1191,6 +1198,7 @@ function fromData(T, D) {
 /* ---------- 地點 ---------- */
 const pname = p => p.c + p.t;
 const seedOf = s => [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7);
+let LMAP = null, LOV = null, LBASE = {}, LMARK = null, RG = null, rgMode = false, baseKind = "photo";
 let TY = null, EQ = null, WARN = null, OB = null, satKind = null, rankKind = "hi", here = null;
 let places = [{ c: "臺北市", t: "中正區" }], active = 0, editing = false, liveOK = false;
 try {
@@ -1254,7 +1262,7 @@ $("dots").addEventListener("click", e => {
   let x0 = 0, y0 = 0, dx = 0, mode = 0;                 // mode: 0 未定、1 橫向、2 直向
   m.addEventListener("touchstart", e => {
     mode = 2; dx = 0;
-    if (e.touches.length !== 1 || places.length < 2 || e.target.closest(".hscroll")) return;
+    if (e.touches.length !== 1 || places.length < 2 || e.target.closest(".hscroll, .lmap")) return;
     x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
     if (x0 < 24 || x0 > window.innerWidth - 24) return;  // 留給瀏覽器的邊緣手勢
     mode = 0; m.style.transition = "none";
@@ -1310,6 +1318,7 @@ function setView(v) {
   $("app").dataset.view = v;
   if (v !== "home") $("sub-title").textContent = pname(places[active]) + "・" + VIEWS[v];
   window.scrollTo(0, 0);
+  if (v === "obs" && typeof ensureMap === "function") ensureMap();
 }
 function go(v) { try { location.hash = v === "home" ? "" : v; } catch (e) {} setView(v); }
 window.addEventListener("hashchange", () => setView(location.hash.slice(1)));
@@ -1666,6 +1675,8 @@ function drawObs() {
     $("light-cap").textContent = lightText ? lightText + (n ? "。紅點是打到地面的閃電，黃點是雲裡的閃電" : "") + (here ? "，黑圈是你選的地點。" : "。") : "";
   }
   $("light-home").textContent = lightText || "雷達回波與觀測圖";
+  drawMapMarks();
+  if (rgMode) $("radar-cap").textContent = "兩指可以放大到街道；顏色越紅越紫，雨越大。雨區一格約 1 公里見方。";
   show("obs-home", !!(M.radar || M.ir || M.vis || M.rain || M.temp || O));
   // 衛星雲圖：優先用高解析動畫，沒有的話用開放資料的單張圖
   const SL = OB.sat || {}, hiKeys = ["rgb", "ir"].filter(k => SL[k] && SL[k].frames && SL[k].frames.length);
@@ -1723,6 +1734,7 @@ let FR = [], frTimer = null, frIdx = 0;
 const hm = v => { const t = new Date(Date.parse(v) + 8 * 3600e3); return isNaN(t) ? "" : hhmm(t.getUTCHours() * 60 + t.getUTCMinutes()); };
 function showFrame(i) {
   frIdx = i; $("r-slider").value = i;
+  if (rgMode && LOV) { LOV.setUrl("data/" + FR[i].file); $("r-time").textContent = hm(FR[i].time); return; }
   const last = i === FR.length - 1 && OB && OB.maps.radar;
   $("radar-img").src = last ? "data/" + OB.maps.radar.file + "?t=" + encodeURIComponent(OB.maps.radar.time || "") : "data/" + FR[i].file;
   $("r-time").textContent = hm(FR[i].time);
@@ -1746,6 +1758,56 @@ $("r-play").addEventListener("click", () => {
   }, 600);
 });
 $("r-slider").addEventListener("input", e => { stopFrames(); showFrame(Number(e.target.value)); });
+
+/* ---------- 互動雷達地圖：國土測繪中心圖資＋自己上色的雨區圖層 ---------- */
+function loadLeaflet() {
+  if (window.L) return Promise.resolve();
+  if (loadLeaflet.p) return loadLeaflet.p;
+  loadLeaflet.p = new Promise((res, rej) => {
+    const c = document.createElement("link"); c.rel = "stylesheet"; c.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"; c.onload = () => { if (LMAP) LMAP.invalidateSize(); }; document.head.appendChild(c);
+    const s = document.createElement("script"); s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"; s.onload = res; s.onerror = () => { loadLeaflet.p = null; rej(); }; document.head.appendChild(s);
+    setTimeout(() => rej(new Error("timeout")), 15000);
+  });
+  return loadLeaflet.p;
+}
+async function ensureMap() {
+  if (!RG || !RG.frames || !RG.frames.length || !RG.bounds) return false;
+  if (LMAP) { setTimeout(() => LMAP.invalidateSize(), 50); return true; }
+  try { await loadLeaflet(); } catch (e) { return false; }
+  $("rmap").hidden = false; $("radar-link").hidden = true; $("base-tabs").hidden = false;
+  const nl = l => `https://wmts.nlsc.gov.tw/wmts/${l}/default/GoogleMapsCompatible/{z}/{y}/{x}`;
+  const attr = '圖資 <a href="https://maps.nlsc.gov.tw/" target="_blank" rel="noopener">內政部國土測繪中心</a>｜雷達 中央氣象署';
+  LBASE.photo = L.layerGroup([L.tileLayer(nl("PHOTO_MIX"), { maxZoom: 18, attribution: attr }), L.tileLayer(nl("CITY"), { maxZoom: 18, opacity: .9 })]);
+  LBASE.map = L.layerGroup([L.tileLayer(nl("EMAP"), { maxZoom: 18, attribution: attr })]);
+  const h = here || { lat: 23.7, lon: 120.95 };
+  LMAP = L.map("rmap", { minZoom: 6, maxZoom: 18, zoomSnap: 0.5, attributionControl: true }).setView([h.lat, h.lon], 9);
+  LBASE[baseKind].addTo(LMAP);
+  L.DomEvent.disableClickPropagation($("rmap-me"));
+  LOV = L.imageOverlay("data/" + RG.frames[RG.frames.length - 1].file, RG.bounds, { opacity: 0.72, className: "rgov", interactive: false }).addTo(LMAP);
+  LMARK = L.layerGroup().addTo(LMAP);
+  rgMode = true;
+  drawMapMarks();
+  setFrames(RG.frames);
+  setTimeout(() => LMAP.invalidateSize(), 50);
+  return true;
+}
+function drawMapMarks() {
+  if (!LMAP || !LMARK) return;
+  LMARK.clearLayers();
+  const L0 = OB && OB.light;
+  if (L0 && L0.pts) L0.pts.forEach(p => L.circleMarker([p[1], p[0]], { radius: p[2] ? 6 : 5, color: p[2] ? "#fff" : "#4a3a00", weight: 2, fillColor: p[2] ? "#ff3b30" : "#ffd400", fillOpacity: 1, interactive: false }).addTo(LMARK));
+  if (here) {
+    L.circleMarker([here.lat, here.lon], { radius: 11, color: "#111", weight: 3, fill: false, interactive: false }).addTo(LMARK);
+    L.circleMarker([here.lat, here.lon], { radius: 4, color: "#111", weight: 2, fillColor: "#fff", fillOpacity: 1, interactive: false }).addTo(LMARK);
+  }
+}
+$("base-tabs").addEventListener("click", e => {
+  const b = e.target.closest("[data-b]"); if (!b || !LMAP) return;
+  LMAP.removeLayer(LBASE[baseKind]); baseKind = b.dataset.b; LBASE[baseKind].addTo(LMAP);
+  if (LOV) LOV.bringToFront();
+  $("base-tabs").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+});
+$("rmap-me").addEventListener("click", e => { e.stopPropagation(); if (LMAP && here) LMAP.setView([here.lat, here.lon], 11); });
 
 /* 衛星雲圖動畫：最近 2 小時，每 10 分鐘一張；放大時看 2750 像素原圖 */
 let SF = [], sTimer = null, sIdx = 0, sLayer = null;
@@ -1830,10 +1892,12 @@ $("rank-tabs").addEventListener("click", e => { const b = e.target.closest("[dat
 $("sat-tabs").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) { satKind = b.dataset.k; sLayer = null; drawObs(); } });
 async function loadObs() {
   const get = f => fetch("data/" + f, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null);
-  const [m, l, o, rf, sat] = await Promise.all([get("maps.json"), get("lightning.json"), get("obs.json"), get("radar.json"), get("sat.json")]);
+  const [m, l, o, rf, sat, rg] = await Promise.all([get("maps.json"), get("lightning.json"), get("obs.json"), get("radar.json"), get("sat.json"), get("rgrid.json")]);
   OB = { maps: m || {}, light: l, obs: o, sat: sat || {} };
   drawObs();
-  setFrames(rf && rf.frames || []);
+  RG = rg && rg.frames && rg.frames.length ? rg : null;
+  if (rgMode && LOV && RG) { LOV.setBounds(L.latLngBounds(RG.bounds)); setFrames(RG.frames); drawMapMarks(); }
+  else { setFrames(rf && rf.frames || []); if ($("app").dataset.view === "obs") ensureMap(); }
 }
 loadObs();
 loadWarn();

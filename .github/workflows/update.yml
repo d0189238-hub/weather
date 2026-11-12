@@ -32,7 +32,6 @@ jobs:
           MOENV_KEY: ${{ secrets.MOENV_KEY }}
           PUSH_SUB: ${{ secrets.PUSH_SUB }}
           PUSH_TOKEN: ${{ secrets.PUSH_TOKEN }}
-          SAT_DIAG: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
           OUT_DIR: _site/data
         run: node scripts/fetch.mjs
       - name: 整理網站檔案
