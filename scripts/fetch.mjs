@@ -880,6 +880,24 @@ async function main() {
       const twNow = new Date(now + 8 * 3600e3), todayStr = twNow.toISOString().slice(0, 10), digestTime = twH === 20;
       const WK = ["日", "一", "二", "三", "四", "五", "六"];
       const dayName = (date, ahead) => { const wd = new Date(date + "T00:00:00Z").getUTCDay(); return ahead === 1 ? "明天" : ahead === 2 ? "後天" : ((ahead >= 7 || (wd !== 0 && wd <= twNow.getUTCDay()) || (twNow.getUTCDay() === 0 && wd !== 0)) ? "下週" : "週") + WK[wd]; };
+      // 原因：從氣象署「全臺天氣小幫手」裡挑出講天氣系統的句子（東北季風、冷空氣、鋒面…）
+      let why = null;
+      if (digestTime || process.env.DIGEST_PREVIEW) {
+        try {
+          const j = await fileapi("F-C0032-031"), u = findUrl(j, /^https?:\/\/\S+$/i);
+          const r = await fetch(u, { signal: AbortSignal.timeout(20000) });
+          let txt = new TextDecoder("big5").decode(Buffer.from(await r.arrayBuffer()));
+          if (!/[今明]天/.test(txt)) txt = new TextDecoder("utf-8").decode(Buffer.from(txt));
+          txt = txt.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\s+/g, "");
+          const KEY = /東北季風|冷空氣|冷氣團|寒流|鋒面|華南雲雨區|颱風|熱帶性低氣壓|低壓|西南氣流|西南風|南風|東風|太平洋高壓|高壓|輻射冷卻|熱對流|水氣/;
+          const para = w => { const m = txt.match(new RegExp(w + "（\\d+日）(.*?)(?=今天（|明天（|後天（|離島天氣|根據|$)")); return m ? m[1] : ""; };
+          for (const p of [para("明天"), para("今天")]) {
+            const cl = p.split(/[，；。]/).filter(c => KEY.test(c) && !/溫度方面|高溫|低溫/.test(c)).map(c => c.replace(/^(環境)?(轉為|轉)?/, m => m.replace("環境", ""))).slice(0, 2);
+            if (cl.length) { why = cl.join("、").replace(/^受/, "受"); break; }
+          }
+          status.seen.digestWhy = why;
+        } catch (e) { status.seen.digestWhy = "讀取失敗 " + String(e.message || e).slice(0, 80); }
+      }
       const digestFor = s => {
         const pl = (s.places || []).slice(0, 4).map(p => ({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, T: townData[p.c + "|" + p.t] })).filter(x => x.T && x.T.w && x.T.w.length);
         if (!pl.length) return null;
@@ -892,14 +910,14 @@ async function main() {
         const temps = pl.map(x => { const r = x.T.w.find(r => r[0] === t1); return r && r[1] != null ? `${x.name} ${Math.round(r[2])}～${Math.round(r[1])}°` : null; }).filter(Boolean);
         const pop = Math.max(...R.map(r => r[4] ?? 0)), wet = R.reduce((a, r) => a | (r[6] || 0), 0);
         const verdict = pop >= 60 || wet & 1 ? "有雨，衣服室內晾" : wet & 2 ? "白天好曬，晚上有雨，傍晚前收" : pop >= 30 ? "可能有短暫雨，曬了早點收" : "整天好曬";
-        let body = `明天 ${temps.join("、")}，${verdict}。`;
+        let body = (why ? why + "。" : "") + `明天 ${temps.join("、")}，${verdict}。`;
         // 這週重點：最先遇到的雨天、明顯轉涼、很熱（最多兩件）
         const notes = [], hiOf = d => { const rs = dayRows(d).filter(r => r[1] != null); return rs.length ? [Math.min(...rs.map(r => r[1])), Math.max(...rs.map(r => r[1]))] : null; };
         const rest = dates.slice(1);
         const rainDay = rest.find(d => dayRows(d).some(r => (r[4] ?? 0) >= 50 || r[6]));
         if (rainDay) { const w = dayRows(rainDay).reduce((a, r) => a | (r[6] || 0), 0); notes.push({ d: rainDay, t: `${dayName(rainDay, ahead(rainDay))}${w === 2 ? "晚上" : ""}有雨` }); }
         let prevMax = hiOf(t1) ? hiOf(t1)[1] : null;
-        for (const d of rest) { const h = hiOf(d); if (!h) continue; if (prevMax != null && prevMax - h[1] >= 5) { notes.push({ d, t: `${dayName(d, ahead(d))}轉涼，高溫只剩 ${h[0] === h[1] ? h[1] : h[0] + "～" + h[1]}°` }); break; } prevMax = Math.max(prevMax ?? h[1], h[1]); }
+        for (const d of rest) { const h = hiOf(d); if (!h) continue; if (prevMax != null && prevMax - h[1] >= 5) { const m = twNow.getUTCMonth() + 1, cold = m >= 10 || m <= 4; notes.push({ d, t: `${dayName(d, ahead(d))}${cold ? "可能有冷空氣南下" : "轉涼"}，高溫只剩 ${h[0] === h[1] ? h[1] : h[0] + "～" + h[1]}°` }); break; } prevMax = Math.max(prevMax ?? h[1], h[1]); }
         const hot = rest.find(d => { const h = hiOf(d); return h && h[1] >= 33; });
         if (hot && notes.length < 2) notes.push({ d: hot, t: `${dayName(hot, ahead(hot))}高溫 ${hiOf(hot)[1]}°，很熱` });
         notes.sort((a, b) => a.d < b.d ? -1 : 1);
