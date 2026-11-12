@@ -7,9 +7,6 @@ jobs:
       - env:
           K: ${{ secrets.CWA_KEY }}
         run: |
-          for id in F-C0035-015 F-C0035-017 F-C0035-001; do
-            for f in XML PNG JPG ""; do
-              u="https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/$id?Authorization=$K&downloadType=WEB"; [ -n "$f" ] && u="$u&format=$f"
-              curl -s -m 20 -D h.txt -o b.bin "$u"; echo "== $id $f $(grep -i 'content-type\|location' h.txt | tr -d '\r' | tr '\n' ' ') size=$(stat -c %s b.bin) $(head -c 400 b.bin | tr -cd '[:print:]')"
-            done
+          for n in 001 003 006 007 008 009 010 011 012 013 014 015 017 019 020 021 022 023 024; do id=F-C0035-$n
+            echo "== $id $(curl -sL -m 20 "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/$id?Authorization=$K&downloadType=WEB&format=JSON" | head -c 900 | tr '\n' ' ')"
           done
