@@ -297,6 +297,9 @@ main { touch-action: pan-y; }
 .map { position: relative; display: block; border-radius: 8px; overflow: hidden; background: var(--cloth2); }
 .map img { display: block; width: 100%; height: auto; min-height: 120px; }
 .map svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.tleg { display: flex; align-items: center; gap: 8px; font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--muted); }
+.tleg[hidden] { display: none; }
+.tleg i { flex: 1; height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgb(52,110,180), rgb(130,205,220) 17%, rgb(46,140,84) 23%, rgb(140,198,108) 43%, rgb(238,234,150) 60%, rgb(241,168,82) 73%, rgb(212,72,52) 87%, rgb(118,22,92)); }
 .tlab rect { fill: rgba(255,255,255,.9); filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.25)); }
 .tlab text { font-family: "Noto Sans TC", -apple-system, "PingFang TC", sans-serif; font-weight: 500; font-size: 30px; text-anchor: middle; fill: #1c2a33; stroke: none; paint-order: stroke; stroke-linejoin: round; }
 .map .lt { fill: #ffd400; stroke: #4a3a00; stroke-width: 2; }
@@ -689,6 +692,7 @@ main { touch-action: pan-y; }
   <section class="v-obs" id="o-temp" hidden>
     <h2>溫度分布</h2>
     <a class="map" id="temp-link" target="_blank" rel="noopener"><img id="temp-img" alt="全臺溫度分布圖" loading="lazy"><svg id="temp-svg" class="tlab" viewBox="0 0 880 880" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+    <div class="tleg" id="temp-legend" hidden><span>5°</span><i></i><span>35°</span></div>
     <span class="cap" id="temp-isl"></span>
     <span class="cap" id="temp-cap"></span>
   </section>
@@ -1678,6 +1682,119 @@ loadTyEq();
 
 /* 溫度分布圖：標上主要氣象站的現在氣溫，太擠的自動略過 */
 let TEMP_LAB = [];
+/* ---------- 自繪溫度分布圖：全臺測站內插＋陸地遮罩，依螢幕解析度重畫 ---------- */
+const TSTOPS = [[-2, [38, 70, 140]], [3, [52, 110, 180]], [7, [80, 160, 205]], [10, [130, 205, 220]], [12, [46, 140, 84]], [15, [78, 168, 92]], [18, [140, 198, 108]], [21, [198, 224, 128]], [23, [238, 234, 150]], [25, [246, 208, 112]], [27, [241, 168, 82]], [29, [230, 122, 62]], [31, [212, 72, 52]], [33, [170, 32, 62]], [36, [118, 22, 92]]];
+function tcol(t) {
+  if (t <= TSTOPS[0][0]) return TSTOPS[0][1];
+  for (let i = 1; i < TSTOPS.length; i++) if (t <= TSTOPS[i][0]) {
+    const [a, ca] = TSTOPS[i - 1], [b, cb] = TSTOPS[i], f = (t - a) / (b - a);
+    return [ca[0] + (cb[0] - ca[0]) * f, ca[1] + (cb[1] - ca[1]) * f, ca[2] + (cb[2] - ca[2]) * f];
+  }
+  return TSTOPS[TSTOPS.length - 1][1];
+}
+const TB = { lo0: 119.28, lo1: 122.08, la0: 21.86, la1: 25.33 };
+function idwAt(st, lat, lon) {
+  const k = Math.cos(23.6 * Math.PI / 180);
+  for (const R of [0.15, 0.35, 0.9]) {
+    let ws = 0, vs = 0;
+    for (const s of st) { const dy = s[0] - lat, dx = (s[1] - lon) * k, d2 = dx * dx + dy * dy; if (d2 > R * R) continue; if (d2 < 1e-8) return s[2]; const w = 1 / (d2 * d2); ws += w; vs += w * s[2]; }
+    if (ws) return vs / ws;
+  }
+  return null;
+}
+function renderTemp(W, O, sm, mine) {
+  const k = Math.cos(23.6 * Math.PI / 180), H = Math.round(W * (TB.la1 - TB.la0) / ((TB.lo1 - TB.lo0) * k));
+  const sx = W / (TB.lo1 - TB.lo0), sy = H / (TB.la1 - TB.la0), P = ([x, y]) => [(x - TB.lo0) * sx, (TB.la1 - y) * sy];
+  // 內插格點（反距離加權，就近 0.35 度內的測站）
+  const st = O.tall, B = 0.2, bk = {};
+  st.forEach(s => { const key = Math.floor(s[0] / B) + "," + Math.floor(s[1] / B); (bk[key] = bk[key] || []).push(s); });
+  const gx = Math.min(360, Math.max(120, Math.round(W / 2.2))), gy = Math.round(gx * H / W);
+  const small = document.createElement("canvas"); small.width = gx; small.height = gy;
+  const sc = small.getContext("2d"), id = sc.createImageData(gx, gy);
+  for (let j = 0; j < gy; j++) {
+    const lat = TB.la1 - (j + 0.5) / gy * (TB.la1 - TB.la0), bi = Math.floor(lat / B);
+    for (let i = 0; i < gx; i++) {
+      const lon = TB.lo0 + (i + 0.5) / gx * (TB.lo1 - TB.lo0), bj = Math.floor(lon / B);
+      let ws = 0, vs = 0, near = null, nd = 1e9;
+      for (let r = 2; r <= 4 && !ws; r += 2) for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) {
+        const list = bk[(bi + a) + "," + (bj + b)]; if (!list) continue;
+        for (const s of list) {
+          const dy = s[0] - lat, dx = (s[1] - lon) * k, d2 = dx * dx + dy * dy;
+          if (d2 > (r === 2 ? 0.35 * 0.35 : 0.9 * 0.9)) continue;
+          if (d2 < 1e-8) { ws = 1; vs = s[2]; a = b = 99; break; }
+          const w = 1 / (d2 * d2); ws += w; vs += w * s[2];
+        }
+      }
+      const o = (j * gx + i) * 4;
+      if (ws) { const c = tcol(vs / ws); id.data[o] = c[0]; id.data[o + 1] = c[1]; id.data[o + 2] = c[2]; id.data[o + 3] = 255; }
+    }
+  }
+  sc.putImageData(id, 0, 0);
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const c = cv.getContext("2d");
+  c.fillStyle = "#eef2f4"; c.fillRect(0, 0, W, H);
+  const path = (geoms) => { c.beginPath(); for (const g of geoms) { const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates; for (const poly of polys) for (const ring of poly) ring.forEach((p, n) => { const [x, y] = P(p); n ? c.lineTo(x, y) : c.moveTo(x, y); }); } };
+  const land = sm.nation && sm.nation.length ? sm.nation : sm.counties;
+  c.save(); path(land); c.clip("evenodd");
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = "high"; c.drawImage(small, 0, 0, W, H);
+  c.restore();
+  const lw = Math.max(0.6, W / 700);
+  path(sm.counties); c.strokeStyle = "rgba(255,255,255,.75)"; c.lineWidth = lw; c.stroke();
+  path(land); c.strokeStyle = "rgba(40,55,65,.55)"; c.lineWidth = lw * 1.2; c.stroke();
+  // 主要城市小標籤
+  const rank = n => { const i = TEMP_FIRST.indexOf(n); return i < 0 ? 99 : i; };
+  const f = W / 28, ph = f * 1.45, placed = [], isl = [];
+  const pill = (x, y, w, h, fill) => { const rx = x - w / 2, ry = y - h / 2, r = h / 2;
+    c.save(); c.shadowColor = "rgba(0,0,0,.28)"; c.shadowBlur = f * 0.25; c.shadowOffsetY = f * 0.06;
+    c.beginPath(); c.moveTo(rx + r, ry); c.arcTo(rx + w, ry, rx + w, ry + h, r); c.arcTo(rx + w, ry + h, rx, ry + h, r); c.arcTo(rx, ry + h, rx, ry, r); c.arcTo(rx, ry, rx + w, ry, r); c.closePath();
+    c.fillStyle = fill; c.fill(); c.restore(); };
+  c.textAlign = "center"; c.textBaseline = "middle";
+  // 我的地點：深色標籤＋地名，優先放
+  c.font = `600 ${f}px "Noto Sans TC", -apple-system, "PingFang TC", sans-serif`;
+  (mine || []).forEach(m => {
+    const v = idwAt(O.tall, m.lat, m.lon); if (v == null) return;
+    const [x, y] = P([m.lon, m.lat]); if (x < 0 || x > W || y < 0 || y > H) return;
+    const label = `${m.name} ${v.toFixed(1)}°`, w = c.measureText(label).width + f * 1.1, ly = y - ph * 0.95;
+    c.beginPath(); c.arc(x, y, f * 0.28, 0, Math.PI * 2); c.fillStyle = "#fff"; c.fill(); c.lineWidth = f * 0.14; c.strokeStyle = "#1c2a33"; c.stroke();
+    pill(x, ly, w, ph, "rgba(28,42,51,.94)");
+    c.fillStyle = "#fff"; c.fillText(label, x, ly + f * 0.04);
+    placed.push([x - w / 2 - 2, ly - ph / 2 - 2, x + w / 2 + 2, y + f * 0.4]);
+  });
+  c.font = `500 ${f}px "Noto Sans TC", -apple-system, "PingFang TC", sans-serif`;
+  (O.temps || []).filter(x => rank(x[0]) < 99 || /^(金門|馬祖)$/.test(x[0])).sort((a, b) => rank(a[0]) - rank(b[0])).forEach(([name, t, lat, lon]) => {
+    if (/^(金門|馬祖)$/.test(name)) { isl.push(`${name} ${t.toFixed(1)}°`); return; }
+    const [x, y] = P([lon, lat]); if (x < 0 || x > W || y < 0 || y > H) return;
+    const label = t.toFixed(1) + "°", w = c.measureText(label).width + f * 0.9;
+    const box = [x - w / 2 - 2, y - ph / 2 - 2, x + w / 2 + 2, y + ph / 2 + 2];
+    if (placed.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) return;
+    placed.push(box);
+    pill(x, y, w, ph, "rgba(255,255,255,.92)");
+    c.fillStyle = "#1c2a33"; c.fillText(label, x, y + f * 0.04);
+  });
+  return { cv, isl };
+}
+let TEMPSM = null;
+const myPts = () => places.map(p => { const c = TEMPSM && TEMPSM.tc && TEMPSM.tc[p.c] && TEMPSM.tc[p.c][p.t]; return c ? { name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, lat: c[0], lon: c[1] } : null; }).filter(Boolean);
+async function drawTempMap(O) {
+  if (!O || !O.tall || O.tall.length < 50) return false;
+  const sm = await loadSmall(); if (!sm) return false;
+  if (!TEMPSM) {
+    try { const t = await fetch("data/towns-topo.json").then(r => r.json()); TEMPSM = { counties: sm.counties, nation: t.objects.nation ? topoFeatures(t, "nation").map(f => f.geometry) : null }; }
+    catch (e) { TEMPSM = { counties: sm.counties, nation: null }; }
+  }
+  const box = $("temp-link"), cssW = box.clientWidth || 340, dpr = Math.min(3, window.devicePixelRatio || 1);
+  try { await document.fonts.load('500 16px "Noto Sans TC"'); } catch (e) {}
+  if (!TEMPSM.tc) { try { TEMPSM.tc = await fetch("data/towncoords.json", { cache: "no-cache" }).then(r => r.json()); } catch (e) { TEMPSM.tc = {}; } }
+  const { cv, isl } = renderTemp(Math.round(cssW * dpr), O, TEMPSM, myPts());
+  cv.id = "temp-cv"; cv.style.width = "100%"; cv.style.height = "auto"; cv.style.display = "block";
+  const old = $("temp-cv"); if (old) old.replaceWith(cv); else box.prepend(cv);
+  $("temp-img").hidden = true; $("temp-svg").innerHTML = "";
+  $("temp-isl").textContent = isl.length ? "離島：" + isl.join("・") : "";
+  $("temp-legend").hidden = false;
+  box.dataset.selfdraw = "1";
+  return true;
+}
+
 /* 放大溫度圖時，把數字畫進圖片裡 */
 async function tempComposite() {
   const img = $("temp-img");
@@ -1801,7 +1918,10 @@ function drawObs() {
     }
   }
   show("o-rain", !!M.rain); if (M.rain) { setImg("rain", M.rain); $("rain-cap").textContent = "從今天 0 點累積到 " + twTime(M.rain.time); }
-  show("o-temp", !!M.temp); if (M.temp) { setImg("temp", M.temp); $("temp-cap").textContent = "觀測時間 " + twTime(M.temp.time) + "・數字是各氣象站的現在氣溫"; drawTempLabels(M.temp, O); }
+  show("o-temp", !!(M.temp || (O && O.tall)));
+  if (M.temp) { setImg("temp", M.temp); drawTempLabels(M.temp, O); }
+  $("temp-cap").textContent = "觀測時間 " + twTime((O && O.time) || (M.temp && M.temp.time)) + "・用全臺氣象站的現在氣溫內插而成；深色標籤是你的地點，白色是主要城市。";
+  drawTempMap(O).catch(() => {});
   // 紫外線
   const uv = O && O.uv ? O.uv : [];
   show("o-uv", uv.length > 0);
@@ -2136,6 +2256,9 @@ $("s-slider").addEventListener("input", e => { stopSat(); showSat(Number(e.targe
   document.querySelectorAll(".map").forEach(a => a.addEventListener("click", e => {
     if (!a.href) return;
     e.preventDefault(); const im = a.querySelector("img");
+    if (a.id === "temp-link" && a.dataset.selfdraw && OB && OB.obs && TEMPSM) {
+      try { const { cv } = renderTemp(1800, OB.obs, TEMPSM, myPts()); openZoom(cv.toDataURL("image/jpeg", 0.92), "全臺溫度分布圖"); return; } catch (x) {}
+    }
     if (a.id === "temp-link") { tempComposite().then(u => openZoom(u || a.href, im ? im.alt : "")); return; }
     openZoom(a.href, im ? im.alt : "");
   }));

@@ -310,6 +310,7 @@ async function main() {
       time: (all.find(x => x.syn) || all[0]).time,
       uv: all.filter(x => x.syn && x.uv !== null && x.uv >= 0).map(x => pick(x).concat(x.uv, x.lat, x.lon)),
       temps: all.filter(x => x.syn && x.temp !== null && x.temp > -30 && x.lat != null).map(x => [x.station, x.temp, x.lat, x.lon, x.county || ""]),
+      tall: all.filter(x => x.temp !== null && x.temp > -30 && x.temp < 50 && x.lat != null && x.lon != null).map(x => [Math.round(x.lat * 1000) / 1000, Math.round(x.lon * 1000) / 1000, x.temp]),
       hi: top("hi", 1), lo: top("lo", -1), rain: top("rain", 1).filter(x => x[3] > 0)
     }));
   }
