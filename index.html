@@ -297,8 +297,8 @@ main { touch-action: pan-y; }
 .map { position: relative; display: block; border-radius: 8px; overflow: hidden; background: var(--cloth2); }
 .map img { display: block; width: 100%; height: auto; min-height: 120px; }
 .map svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-.tlab circle { fill: #fff; stroke: #1c2a33; stroke-width: 2; }
-.tlab text { font-family: var(--display); font-weight: 600; font-size: 30px; letter-spacing: 0; text-anchor: end; fill: #1c2a33; stroke: rgba(255,255,255,.85); stroke-width: 3px; paint-order: stroke; stroke-linejoin: round; }
+.tlab rect { fill: rgba(255,255,255,.9); filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.25)); }
+.tlab text { font-family: "Noto Sans TC", -apple-system, "PingFang TC", sans-serif; font-weight: 500; font-size: 30px; text-anchor: middle; fill: #1c2a33; stroke: none; paint-order: stroke; stroke-linejoin: round; }
 .map .lt { fill: #ffd400; stroke: #4a3a00; stroke-width: 2; }
 .map .lt.g { fill: #ff3b30; stroke: #fff; }
 .map .me { fill: none; stroke: #111; stroke-width: 5; }
@@ -1686,13 +1686,14 @@ async function tempComposite() {
   cv.width = W; cv.height = H;
   const c = cv.getContext("2d");
   c.drawImage(img, 0, 0);
-  try { await document.fonts.load(`600 ${Math.round(30 * k)}px "Noto Serif Display"`); } catch (e) {}
-  c.font = `600 ${Math.round(30 * k)}px "Noto Serif Display", "Noto Serif TC", serif`;
-  c.textAlign = "right"; c.textBaseline = "alphabetic"; c.lineJoin = "round";
-  for (const [x, y, t] of TEMP_LAB) {
-    c.beginPath(); c.arc(x * k, y * k, 4.2 * k, 0, Math.PI * 2); c.fillStyle = "#fff"; c.fill(); c.lineWidth = 2 * k; c.strokeStyle = "#1c2a33"; c.stroke();
-    c.lineWidth = 3 * k; c.strokeStyle = "rgba(255,255,255,.85)"; c.strokeText(t, (x - 8) * k, (y + 8) * k);
-    c.fillStyle = "#1c2a33"; c.fillText(t, (x - 8) * k, (y + 8) * k);
+  c.font = `500 ${Math.round(30 * k)}px "Noto Sans TC", -apple-system, "PingFang TC", sans-serif`;
+  c.textAlign = "center"; c.textBaseline = "alphabetic"; c.lineJoin = "round";
+  for (const [x, y, t, w, h] of TEMP_LAB) {
+    const rx = (x - w / 2) * k, ry = (y - h / 2) * k, rw = w * k, rh = h * k, r = rh / 2;
+    c.save(); c.shadowColor = "rgba(0,0,0,.25)"; c.shadowBlur = 3 * k; c.shadowOffsetY = 1 * k;
+    c.beginPath(); c.moveTo(rx + r, ry); c.arcTo(rx + rw, ry, rx + rw, ry + rh, r); c.arcTo(rx + rw, ry + rh, rx, ry + rh, r); c.arcTo(rx, ry + rh, rx, ry, r); c.arcTo(rx, ry, rx + rw, ry, r); c.closePath();
+    c.fillStyle = "rgba(255,255,255,.92)"; c.fill(); c.restore();
+    c.fillStyle = "#1c2a33"; c.fillText(t, x * k, (y + 11) * k);
   }
   try { return cv.toDataURL("image/jpeg", 0.9); } catch (e) { return null; }
 }
@@ -1709,11 +1710,12 @@ function drawTempLabels(m, O) {
     const x = (lon - lo0) / (lo1 - lo0) * W, y = (la1 - lat) / (la1 - la0) * H;
     if (x < 10 || x > W - 10 || y < 10 || y > H - 10) { if (/^(金門|馬祖)$/.test(name)) isl.push(`${name} ${t.toFixed(1)}°`); continue; }
     if (y < 70 || x > 770) continue;
-    const box = [x - 80, y - 18, x + 6, y + 11];
+    const label = t.toFixed(1) + "°", w = label.length * 17.5 + 22, h = 42;
+    const box = [x - w / 2 - 3, y - h / 2 - 3, x + w / 2 + 3, y + h / 2 + 3];
     if (placed.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
     placed.push(box);
-    TEMP_LAB.push([x, y, t.toFixed(1)]);
-    out.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.2"/><text x="${(x - 8).toFixed(1)}" y="${(y + 8).toFixed(1)}">${t.toFixed(1)}</text>`);
+    TEMP_LAB.push([x, y, label, w, h]);
+    out.push(`<rect x="${(x - w / 2).toFixed(1)}" y="${(y - h / 2).toFixed(1)}" width="${w.toFixed(1)}" height="${h}" rx="${h / 2}"/><text x="${x.toFixed(1)}" y="${(y + 11).toFixed(1)}">${label}</text>`);
   }
   svg.innerHTML = out.join("");
   $("temp-isl").textContent = isl.length ? "離島：" + isl.join("・") : "";
