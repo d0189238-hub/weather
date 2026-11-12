@@ -306,11 +306,10 @@ async function main() {
     const uniq = new Map(); obs.forEach(x => { if (!uniq.has(x.station)) uniq.set(x.station, x); });
     const all = [...uniq.values()], pick = x => [x.station, x.county || "", x.town || ""];
     const top = (key, dir, n = 5) => all.filter(x => x[key] !== null && x[key] > -50).sort((a, b) => dir * (b[key] - a[key])).slice(0, n).map(x => pick(x).concat(x[key]));
-    status.seen.extraTemps = all.filter(x => /斗六|埔里|梧棲/.test(x.station || "")).map(x => x.station + (x.syn ? "*" : "") + " " + x.temp);
     await writeFile(OUT + "/obs.json", JSON.stringify({
       time: (all.find(x => x.syn) || all[0]).time,
       uv: all.filter(x => x.syn && x.uv !== null && x.uv >= 0).map(x => pick(x).concat(x.uv, x.lat, x.lon)),
-      temps: all.filter(x => (x.syn || ["斗六", "埔里"].includes(x.station)) && x.temp !== null && x.temp > -30 && x.lat != null).map(x => [x.station, x.temp, x.lat, x.lon, x.county || ""]),
+      temps: all.filter(x => (x.syn || ["斗六", "埔里", "梧棲"].includes(x.station)) && x.temp !== null && x.temp > -30 && x.lat != null).map(x => [x.station, x.temp, x.lat, x.lon, x.county || ""]),
       tall: all.filter(x => x.temp !== null && x.temp > -30 && x.temp < 50 && x.lat != null && x.lon != null).map(x => [Math.round(x.lat * 1000) / 1000, Math.round(x.lon * 1000) / 1000, x.temp]),
       hi: top("hi", 1), lo: top("lo", -1), rain: top("rain", 1).filter(x => x[3] > 0)
     }));
