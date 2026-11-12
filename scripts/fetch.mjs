@@ -629,6 +629,27 @@ async function main() {
   status.seen.gridFlip = rgridOut.flip;
   const gv = (x, y) => grid.v[(grid.flip ? grid.Y - 1 - y : y) * grid.X + x];
   // 上色（氣象署雷達色階），投影成 Web Mercator 的透明 PNG
+  const makeOverlay = getVal => {
+    if (!grid || !libs.png) return null;
+    const { X, Y, lon0, lat0, res } = grid;
+    const latS = lat0, latN = lat0 + (Y - 1) * res, lonW = lon0, lonE = lon0 + (X - 1) * res;
+    const merc = la => Math.log(Math.tan(Math.PI / 4 + la * Math.PI / 360));
+    const mS = merc(latS), mN = merc(latN), W = X, H = Math.round((mN - mS) / ((lonE - lonW) * Math.PI / 180) * (W - 1)) + 1;
+    const COL = [[65, [255, 255, 255]], [60, [150, 0, 220]], [55, [230, 0, 255]], [50, [190, 0, 0]], [45, [255, 0, 0]], [40, [255, 128, 0]], [35, [255, 200, 0]], [30, [255, 255, 0]], [25, [0, 150, 0]], [20, [0, 200, 0]], [15, [0, 128, 255]], [10, [0, 200, 255]]];
+    const png = new libs.png.PNG({ width: W, height: H });
+    for (let py = 0; py < H; py++) {
+      const m = mN - (mN - mS) * py / (H - 1), la = (2 * Math.atan(Math.exp(m)) - Math.PI / 2) * 180 / Math.PI;
+      const gy = Math.round((la - lat0) / res);
+      for (let px = 0; px < W; px++) {
+        const o = (py * W + px) * 4;
+        const val = gy >= 0 && gy < Y ? getVal(px, gy) : -99;
+        const c = val >= 10 && val < 100 ? COL.find(z => val >= z[0]) : null;
+        if (c) { png.data[o] = c[1][0]; png.data[o + 1] = c[1][1]; png.data[o + 2] = c[1][2]; png.data[o + 3] = 255; }
+        else png.data[o + 3] = 0;
+      }
+    }
+    return libs.png.PNG.sync.write(png);
+  };
   try {
     await mkdir(OUT + "/rgrid", { recursive: true });
     const keep = [];
@@ -640,23 +661,8 @@ async function main() {
     if (grid && libs.png) {
       const { X, Y, lon0, lat0, res } = grid;
       const latS = lat0, latN = lat0 + (Y - 1) * res, lonW = lon0, lonE = lon0 + (X - 1) * res;
-      const merc = la => Math.log(Math.tan(Math.PI / 4 + la * Math.PI / 360));
-      const mS = merc(latS), mN = merc(latN), W = X, H = Math.round((mN - mS) / ((lonE - lonW) * Math.PI / 180) * (W - 1)) + 1;
-      const COL = [[65, [255, 255, 255]], [60, [150, 0, 220]], [55, [230, 0, 255]], [50, [190, 0, 0]], [45, [255, 0, 0]], [40, [255, 128, 0]], [35, [255, 200, 0]], [30, [255, 255, 0]], [25, [0, 150, 0]], [20, [0, 200, 0]], [15, [0, 128, 255]], [10, [0, 200, 255]]];
-      const png = new libs.png.PNG({ width: W, height: H });
-      for (let py = 0; py < H; py++) {
-        const m = mN - (mN - mS) * py / (H - 1), la = (2 * Math.atan(Math.exp(m)) - Math.PI / 2) * 180 / Math.PI;
-        const gy = Math.round((la - lat0) / res);
-        for (let px = 0; px < W; px++) {
-          const o = (py * W + px) * 4;
-          const val = gy >= 0 && gy < Y ? gv(px, gy) : -99;
-          const c = val >= 10 && val < 100 ? COL.find(z => val >= z[0]) : null;
-          if (c) { png.data[o] = c[1][0]; png.data[o + 1] = c[1][1]; png.data[o + 2] = c[1][2]; png.data[o + 3] = 255; }
-          else png.data[o + 3] = 0;
-        }
-      }
       const t = grid.time || new Date().toISOString(), name = "rgrid/g-" + Math.floor(Date.parse(t) / 60e3) + ".png";
-      await writeFile(OUT + "/" + name, libs.png.PNG.sync.write(png));
+      await writeFile(OUT + "/" + name, makeOverlay((px, gy) => gv(px, gy)));
       keep.push({ file: name, time: t });
       rgridOut.bounds = [[latS - res / 2, lonW - res / 2], [latN + res / 2, lonE + res / 2]];
     } else if (prevG.bounds) rgridOut.bounds = prevG.bounds;
@@ -665,6 +671,83 @@ async function main() {
     status.seen.rgridFrames = rgridOut.frames.length;
   } catch (e) { fail("雨區圖層", e); }
   await writeFile(OUT + "/rgrid.json", JSON.stringify(rgridOut));
+  // ---------- 雨帶推估（外推法）：比對上一張雷達格點算移動方向與速度，往後推 30、60 分鐘 ----------
+  const nowcast = { time: grid ? grid.time : null, frames: [], towns: {}, motion: null };
+  try {
+    if (grid) {
+      const { X, Y, lon0, lat0, res } = grid, F = 3, X3 = Math.floor(X / F), Y3 = Math.floor(Y / F);
+      const val = (x, y) => { if (x < 0 || y < 0 || x >= X || y >= Y) return 0; const v = gv(x, y); return v >= 0 && v < 100 ? v : 0; };
+      const cur = new Uint8Array(X3 * Y3);
+      for (let y = 0; y < Y3; y++) for (let x = 0; x < X3; x++) { let m = 0; for (let a = 0; a < F; a++) for (let b = 0; b < F; b++) { const v = val(x * F + b, y * F + a); if (v > m) m = v; } cur[y * X3 + x] = Math.min(255, Math.round(m)); }
+      let prev = null;
+      if (site) { try { const r = await fetch(site + "data/rgrid-prev.json?t=" + Date.now(), { signal: AbortSignal.timeout(20000) }); if (r.ok) prev = await r.json(); } catch (e) {} }
+      // 同一張雷達重跑時，改用前一次保存的更早那張當比對基準
+      if (prev && prev.time === grid.time) prev = prev.older || null;
+      await writeFile(OUT + "/rgrid-prev.json", JSON.stringify({ time: grid.time, X3, Y3, d: Buffer.from(cur).toString("base64"), older: prev ? { time: prev.time, X3: prev.X3, Y3: prev.Y3, d: prev.d } : null }));
+      const dt = prev && prev.time && grid.time ? (Date.parse(grid.time) - Date.parse(prev.time)) / 60e3 : 0;
+      if (prev && prev.X3 === X3 && prev.Y3 === Y3 && dt >= 5 && dt <= 40) {
+        const pv = new Uint8Array(Buffer.from(prev.d, "base64"));
+        const cellKm = res * F * 111, R = Math.min(12, Math.ceil(90 * dt / 60 / cellKm));
+        const at = (arr, x, y) => x < 0 || y < 0 || x >= X3 || y >= Y3 ? 0 : arr[y * X3 + x];
+        const BS = 36, vecs = [];
+        for (let by = 0; by + BS <= Y3; by += BS / 2) for (let bx = 0; bx + BS <= X3; bx += BS / 2) {
+          let echo = 0; for (let y = by; y < by + BS; y++) for (let x = bx; x < bx + BS; x++) if (cur[y * X3 + x] >= 20) echo++;
+          if (echo < 40) continue;
+          let best = null, zero = null;
+          for (let sy = -R; sy <= R; sy++) for (let sx = -R; sx <= R; sx++) {
+            let cost = 0, n = 0;
+            for (let y = by; y < by + BS; y += 2) for (let x = bx; x < bx + BS; x += 2) { const c = cur[y * X3 + x], p = at(pv, x - sx, y - sy); if (c || p) { cost += Math.abs(c - p); n++; } }
+            if (!n) continue; cost /= n;
+            if (sx === 0 && sy === 0) zero = cost;
+            if (!best || cost < best.cost) best = { cost, sx, sy };
+          }
+          if (best && (zero === null || best.cost < zero * 0.97)) vecs.push({ cx: bx + BS / 2, cy: by + BS / 2, vx: best.sx / dt, vy: best.sy / dt, w: echo });
+        }
+        if (vecs.length) {
+          const med = k => { const s = vecs.map(v => v[k]).sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+          const gvx = med("vx"), gvy = med("vy");
+          // 每個粗格點的移動向量：附近區塊加權平均，太遠就用全區中位數
+          const VX = new Float32Array(X3 * Y3), VY = new Float32Array(X3 * Y3);
+          for (let y = 0; y < Y3; y += 4) for (let x = 0; x < X3; x += 4) {
+            let ws = 0.15, sx = gvx * 0.15, sy = gvy * 0.15;
+            for (const v of vecs) { const d2 = ((v.cx - x) ** 2 + (v.cy - y) ** 2) / (BS * BS); if (d2 > 4) continue; const w = v.w / 100 / (0.25 + d2); ws += w; sx += w * v.vx; sy += w * v.vy; }
+            for (let a = 0; a < 4 && y + a < Y3; a++) for (let b = 0; b < 4 && x + b < X3; b++) { VX[(y + a) * X3 + x + b] = sx / ws; VY[(y + a) * X3 + x + b] = sy / ws; }
+          }
+          const kmh = Math.hypot(gvx * 0.915, gvy) * cellKm * 60;
+          nowcast.motion = { vecs: vecs.length, kmh: Math.round(kmh), dir: Math.round((Math.atan2(gvx, gvy) * 180 / Math.PI + 360) % 360), dt };
+          // 推估圖層（+30、+60 分鐘）
+          const vAt = (x, y) => { const cx = Math.min(X3 - 1, Math.max(0, Math.floor(x / F))), cy = Math.min(Y3 - 1, Math.max(0, Math.floor(y / F))); return [VX[cy * X3 + cx], VY[cy * X3 + cx]]; };
+          for (const lead of [30, 60]) {
+            const fname = "rgrid/n-" + lead + "-" + Math.floor(Date.parse(grid.time) / 60e3) + ".png";
+            const png = makeOverlay((px, gy) => { const [vx, vy] = vAt(px, gy); return val(Math.round(px - vx * F * lead), Math.round(gy - vy * F * lead)); });
+            if (png) { await writeFile(OUT + "/" + fname, png); nowcast.frames.push({ file: fname, time: new Date(Date.parse(grid.time) + lead * 60e3).toISOString(), lead }); }
+          }
+          // 各鄉鎮：1 小時內雨帶會不會到
+          const cAt = (x, y) => at(cur, x, y), near = (x, y, r) => { let m = 0; for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) { const v = cAt(x + b, y + a); if (v > m) m = v; } return m; };
+          const DIR = ["北", "東北", "東", "東南", "南", "西南", "西", "西北"], dirOf = deg => DIR[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+          for (const key in townData) {
+            const T = townData[key]; if (!T || T.lat == null) continue;
+            const tx = (T.lon - lon0) / res / F, ty = (T.lat - lat0) / res / F;
+            if (tx < 0 || ty < 0 || tx >= X3 || ty >= Y3) continue;
+            if (near(Math.round(tx), Math.round(ty), 1) >= 20) continue;
+            const ci0 = Math.min(X3 - 1, Math.floor(tx)), cj0 = Math.min(Y3 - 1, Math.floor(ty)), vx = VX[cj0 * X3 + ci0], vy = VY[cj0 * X3 + ci0];
+            for (let L = 10; L <= 60; L += 10) {
+              const sx = Math.round(tx - vx * L), sy = Math.round(ty - vy * L);
+              if (near(sx, sy, 1) >= 25) {
+                const dxk = (sx - tx) * cellKm * Math.cos(T.lat * Math.PI / 180), dyk = (sy - ty) * cellKm;
+                nowcast.towns[key] = { eta: L, km: Math.round(Math.hypot(dxk, dyk)), from: dirOf(Math.atan2(dxk, dyk) * 180 / Math.PI), to: dirOf(Math.atan2(vx, vy) * 180 / Math.PI), kmh: Math.round(Math.hypot(vx * Math.cos(T.lat * Math.PI / 180), vy) * cellKm * 60) };
+                break;
+              }
+            }
+          }
+          nowcast.motion.towns = Object.keys(nowcast.towns).length;
+        }
+      } else nowcast.motion = { skipped: prev ? "dt " + Math.round(dt) : "no prev" };
+    }
+  } catch (e) { fail("雨帶推估", e); }
+  status.seen.nowcast = nowcast.motion;
+  await writeFile(OUT + "/nowcast.json", JSON.stringify(nowcast));
+
   // 診斷：國土測繪中心圖資
   if (process.env.SAT_DIAG) {
     const out = {};
@@ -719,6 +802,7 @@ async function main() {
           if (!quiet) {
             const e10 = echo(T.lat, T.lon, 10);
             if (e10 !== null && e10 >= 30) out.push({ k: "rd|" + key, cool: 3, text: `${name}附近 10 公里內有雨，衣服記得收` });
+            else { const n = nowcast.towns[key]; if (n && n.eta <= 45) out.push({ k: "nc|" + key, cool: 3, text: `${name}${n.from}邊約 ${n.km} 公里有雨帶，約 ${n.eta} 分鐘後可能到，衣服先收（雷達推估）` }); }
             const rows = (T.f || []).map(r => ({ ms: Date.parse(r[0]), p: r[3] })).filter(r => r.p != null);
             const cur = rows.filter(r => r.ms <= now).pop(), up = rows.find(r => r.ms > now && r.ms <= now + 3 * 3600e3 && r.p >= 70);
             if (up && (!cur || cur.p < 50)) out.push({ k: "fc|" + key + "|" + up.ms, cool: 24, text: `${name} ${new Date(up.ms + 8 * 3600e3).getUTCHours()} 點起降雨機率 ${up.p}%，有曬衣服記得收` });

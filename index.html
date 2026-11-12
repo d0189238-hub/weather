@@ -349,6 +349,8 @@ main { touch-action: pan-y; }
 .player { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; }
 .player .btn { padding: 6px 12px; white-space: nowrap; }
 .player input { width: 100%; accent-color: var(--rain); }
+.estb { position: absolute; z-index: 500; left: 10px; top: 10px; padding: 5px 10px; border-radius: 999px; background: rgba(20,24,30,.78); color: #fff; font-size: 13px; pointer-events: none; }
+#r-time.est { color: var(--accent, #c0392b); }
 #r-time, .ptime { font-family: var(--display); font-weight: 600; font-size: 20px; min-width: 52px; text-align: right; }
 .thumb { display: grid; grid-template-columns: 112px 1fr; gap: var(--s2); align-items: center; }
 .thumb img { width: 112px; height: 112px; object-fit: cover; border-radius: 6px; background: var(--cloth2); }
@@ -662,7 +664,7 @@ main { touch-action: pan-y; }
     <div class="chips" id="layer-chips" hidden role="group" aria-label="地圖圖層">
       <button type="button" data-l="rain" aria-pressed="true">雨區</button><button type="button" data-l="light" aria-pressed="true">閃電</button><button type="button" data-l="eq" aria-pressed="true">地震</button><button type="button" data-l="fault" aria-pressed="false">斷層</button>
     </div>
-    <div class="lmap" id="rmap" hidden><button type="button" class="lme" id="rmap-me">◎ 我的位置</button></div>
+    <div class="lmap" id="rmap" hidden><button type="button" class="lme" id="rmap-me">◎ 我的位置</button><span class="estb" id="r-est" hidden>推估：照雨帶現在的方向和速度往後推</span></div>
     <button type="button" class="eqbar" id="eq-bar" hidden></button>
     <p class="cap" id="fault-note" hidden>紅線是經濟部公布的 36 條活動斷層（1/25,000 版），位置僅供參考，放大後不代表精確位置，不能用來判斷某棟建築是否在斷層上。</p>
     <a class="map" id="radar-link" target="_blank" rel="noopener"><img id="radar-img" alt="雷達整合回波圖，疊上過去一小時的閃電位置"><svg id="radar-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true"></svg></a>
@@ -946,6 +948,14 @@ function renderLaundry(d) {
   const r = dryPlan(d.hours, d.nowMin, d.sun);
   $("ld-ic").innerHTML = gi("laundry");
   $("ld-k").textContent = "曬衣服";
+  // 雷達推估：雨帶 1 小時內可能到，先提醒收衣服
+  const pl = places[active], n = NC && NC.towns && pl && !d.sample ? NC.towns[pl.c + "|" + pl.t] : null;
+  const fresh = n && NC.time && Date.now() - Date.parse(NC.time) < 50 * 60e3;
+  if (fresh) {
+    const left = Math.max(5, n.eta - Math.round((Date.now() - Date.parse(NC.time)) / 60e3));
+    r.main = `衣服先收，約 ${left} 分鐘後可能下雨`;
+    r.sub = `${n.from}邊約 ${n.km} 公里有雨帶，往${n.to}移動，每小時約 ${n.kmh} 公里（雷達推估）`;
+  }
   $("ld-main").innerHTML = r.main;
   $("ld-sub").textContent = r.sub;
   const bar = r.bar || [];
@@ -1251,7 +1261,7 @@ const pname = p => p.c + p.t;
 const seedOf = s => [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7);
 let FC = null, FCGEO = null, fcKind = "wx", fcIdx = 0, fcTimer = null, SM = null, smKind = "wx";
 let LLAB = null, TC = null, LMEL = null, LEQ = null, LFAULT = null, eqMarks = {};
-let LMAP = null, LOV = null, LBASE = {}, LMARK = null, RG = null, rgMode = false, baseKind = "photo";
+let NC = null, LMAP = null, LOV = null, LBASE = {}, LMARK = null, RG = null, rgMode = false, baseKind = "photo";
 let TY = null, EQ = null, WARN = null, OB = null, satKind = null, rankKind = "hi", here = null;
 let places = [{ c: "臺北市", t: "中正區" }], active = 0, editing = false, liveOK = false;
 try {
@@ -1953,12 +1963,19 @@ let FR = [], frTimer = null, frIdx = 0;
 const hm = v => { const t = new Date(Date.parse(v) + 8 * 3600e3); return isNaN(t) ? "" : hhmm(t.getUTCHours() * 60 + t.getUTCMinutes()); };
 function showFrame(i) {
   frIdx = i; $("r-slider").value = i;
-  if (rgMode && LOV) { LOV.setUrl("data/" + FR[i].file); $("r-time").textContent = hm(FR[i].time); return; }
+  if (rgMode && LOV) {
+    const f = FR[i];
+    LOV.setUrl("data/" + f.file); LOV.setOpacity(f.lead ? 0.45 : 0.72);
+    $("r-time").textContent = f.lead ? "+" + f.lead + " 分" : hm(f.time);
+    $("r-time").classList.toggle("est", !!f.lead);
+    $("r-est").hidden = !f.lead;
+    return;
+  }
   const last = i === FR.length - 1 && OB && OB.maps.radar;
   $("radar-img").src = last ? "data/" + OB.maps.radar.file + "?t=" + encodeURIComponent(OB.maps.radar.time || "") : "data/" + FR[i].file;
   $("r-time").textContent = hm(FR[i].time);
 }
-function stopFrames() { clearInterval(frTimer); frTimer = null; $("r-play").textContent = "▶ 播放"; }
+function stopFrames() { clearTimeout(frTimer); clearInterval(frTimer); frTimer = null; $("r-play").textContent = "▶ 播放"; }
 function setFrames(list) {
   stopFrames();
   FR = list.filter(f => f && f.file);
@@ -1972,12 +1989,23 @@ $("r-play").addEventListener("click", () => {
   if (frTimer) { stopFrames(); return; }
   $("r-play").textContent = "⏸ 暫停";
   if (frIdx >= FR.length - 1) showFrame(0);
-  frTimer = setInterval(() => {
+  // 推估的兩格停久一點，播到最後也多停一下
+  const step = () => {
     showFrame(frIdx >= FR.length - 1 ? 0 : frIdx + 1);
-  }, 600);
+    const f = FR[frIdx];
+    frTimer = setTimeout(step, f && f.lead ? 1100 : frIdx === FR.length - 1 ? 1200 : 600);
+  };
+  frTimer = setTimeout(step, 10);
 });
 $("r-slider").addEventListener("input", e => { stopFrames(); showFrame(Number(e.target.value)); });
 
+// 雨區動畫的格子：觀測的 2 小時，再接上推估的 +30、+60 分（只在推估跟最新一張同時間時才接）
+function rgFrames() {
+  const list = RG ? RG.frames.slice() : [];
+  const last = list[list.length - 1];
+  if (NC && NC.frames && NC.frames.length && last && NC.time === last.time) NC.frames.forEach(f => list.push(f));
+  return list;
+}
 /* ---------- 互動雷達地圖：國土測繪中心圖資＋自己上色的雨區圖層 ---------- */
 function loadLeaflet() {
   if (window.L) return Promise.resolve();
@@ -2011,7 +2039,7 @@ async function ensureMap() {
   rgMode = true;
   $("layer-chips").hidden = false;
   drawMapMarks();
-  setFrames(RG.frames);
+  setFrames(rgFrames());
   drawEqLayer();
   if (EQ) drawTyEq();
   setTimeout(() => LMAP.invalidateSize(), 50);
@@ -2264,11 +2292,13 @@ $("rank-tabs").addEventListener("click", e => { const b = e.target.closest("[dat
 $("sat-tabs").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) { satKind = b.dataset.k; sLayer = null; drawObs(); } });
 async function loadObs() {
   const get = f => fetch("data/" + f, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null);
-  const [m, l, o, rf, sat, rg] = await Promise.all([get("maps.json"), get("lightning.json"), get("obs.json"), get("radar.json"), get("sat.json"), get("rgrid.json")]);
+  const [m, l, o, rf, sat, rg, nc] = await Promise.all([get("maps.json"), get("lightning.json"), get("obs.json"), get("radar.json"), get("sat.json"), get("rgrid.json"), get("nowcast.json")]);
   OB = { maps: m || {}, light: l, obs: o, sat: sat || {} };
+  NC = nc;
+  if (current && !current.sample) renderLaundry(current);
   drawObs();
   RG = rg && rg.frames && rg.frames.length ? rg : null;
-  if (rgMode && LOV && RG) { LOV.setBounds(L.latLngBounds(RG.bounds)); setFrames(RG.frames); drawMapMarks(); }
+  if (rgMode && LOV && RG) { LOV.setBounds(L.latLngBounds(RG.bounds)); setFrames(rgFrames()); drawMapMarks(); }
   else { setFrames(rf && rf.frames || []); if ($("app").dataset.view === "obs") ensureMap(); }
 }
 loadObs();
