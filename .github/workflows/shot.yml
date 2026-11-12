@@ -1,0 +1,17 @@
+name: 截圖檢查
+on: workflow_dispatch
+jobs:
+  shot:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          K: ${{ secrets.CWA_KEY }}
+        run: |
+          for n in $(seq -w 3 40); do id=F-C0032-0$n
+            r=$(curl -sL -m 20 "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/$id?Authorization=$K&downloadType=WEB&format=JSON")
+            echo "== $id $(echo "$r" | head -c 1500 | tr '\n' ' ')"
+          done
+          for id in F-A0012-001 F-C0033-001 F-C0034-001 F-C0034-005; do
+            r=$(curl -sL -m 20 "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/$id?Authorization=$K&downloadType=WEB&format=JSON")
+            echo "== $id $(echo "$r" | head -c 1500 | tr '\n' ' ')"
+          done
