@@ -382,7 +382,15 @@ async function main() {
   }
   const qt = v => { const t = String(v || ""); return Date.parse(/[+-]\d\d:?\d\d$|Z$/.test(t) ? t : t.replace(" ", "T") + "+08:00"); };
   quakes.sort((a, b) => qt(b.time) - qt(a.time));
-  await writeFile(OUT + "/quake.json", JSON.stringify({ list: quakes.slice(0, 10) }));
+  // 保留最近 30 天：接上一版網站的地震紀錄（舊的只留摘要，不留測站）
+  let prevQ = [];
+  if (site) { try { const r = await fetch(site + "data/quake.json?t=" + Date.now(), { signal: AbortSignal.timeout(20000) }); if (r.ok) prevQ = (await r.json()).list || []; } catch (e) {} }
+  const seenQ = new Set(quakes.map(q => String(q.no) + q.time));
+  for (const q of prevQ) if (!seenQ.has(String(q.no) + q.time) && Date.now() - qt(q.time) < 30 * 864e5) { quakes.push(q); seenQ.add(String(q.no) + q.time); }
+  quakes.sort((a, b) => qt(b.time) - qt(a.time));
+  const qList = quakes.slice(0, 120).map((q, i) => i < 15 ? q : { ...q, stations: [] });
+  status.seen.quakeKept = qList.length;
+  await writeFile(OUT + "/quake.json", JSON.stringify({ list: qList }));
 
   // ---------- 颱風路徑（有颱風時才有資料）----------
   const typhoons = [];

@@ -304,6 +304,19 @@ main { touch-action: pan-y; }
 .cap { font-size: 16px; color: var(--muted); }
 .lmap { position: relative; height: min(68vh, 480px); border-radius: 8px; overflow: hidden; background: #a9cbdc; z-index: 0; }
 .lmap[hidden] { display: none; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips[hidden] { display: none; }
+.chips button { font: inherit; font-size: 15px; min-height: 34px; padding: 4px 12px; border-radius: 17px; border: 1px solid var(--line); background: none; color: var(--muted); cursor: pointer; }
+.chips button.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.eqbar { display: flex; align-items: center; gap: 10px; width: 100%; font: inherit; font-size: 16px; text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
+.eqbar[hidden] { display: none; }
+.eqbar .tag { flex: none; font-size: 13px; font-weight: 700; color: #fff; background: #e0412b; border-radius: 10px; padding: 2px 8px; }
+.eqbar .tx { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eqstar { background: none; border: 0; filter: drop-shadow(0 1px 1px rgba(0,0,0,.4)); }
+.lmap .faultl { filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); }
+.eqpop { display: flex; flex-direction: column; gap: 3px; font-size: 15px; min-width: 170px; }
+.eqpop b { font-size: 16px; } .eqpop em { font-style: normal; font-weight: 700; font-size: 18px; }
+.eqpop a { color: #1f6fb2; margin-top: 4px; }
 .lmap .rgov { image-rendering: pixelated; image-rendering: crisp-edges; }
 .lme { position: absolute; top: 10px; right: 10px; z-index: 1000; font: inherit; font-size: 15px; padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(0,0,0,.25); background: rgba(255,255,255,.92); color: #1c2a33; cursor: pointer; }
 .leaflet-container { font: inherit; }
@@ -622,8 +635,13 @@ main { touch-action: pan-y; }
     <div id="ty-body"></div>
   </section>
   <section class="v-obs" id="o-radar" hidden>
-    <div class="sat-h"><h2>雷達回波・閃電</h2><span class="sat-t" id="base-tabs" hidden><button type="button" class="on" data-b="photo">衛星</button><button type="button" data-b="map">簡潔</button></span></div>
+    <div class="sat-h"><h2>即時地圖</h2><span class="sat-t" id="base-tabs" hidden><button type="button" class="on" data-b="photo">衛星</button><button type="button" data-b="map">簡潔</button></span></div>
+    <div class="chips" id="layer-chips" hidden role="group" aria-label="地圖圖層">
+      <button type="button" data-l="rain" aria-pressed="true">雨區</button><button type="button" data-l="light" aria-pressed="true">閃電</button><button type="button" data-l="eq" aria-pressed="true">地震</button><button type="button" data-l="fault" aria-pressed="false">斷層</button>
+    </div>
     <div class="lmap" id="rmap" hidden><button type="button" class="lme" id="rmap-me">◎ 我的位置</button></div>
+    <button type="button" class="eqbar" id="eq-bar" hidden></button>
+    <p class="cap" id="fault-note" hidden>紅線是經濟部公布的 36 條活動斷層（1/25,000 版），位置僅供參考，放大後不代表精確位置，不能用來判斷某棟建築是否在斷層上。</p>
     <a class="map" id="radar-link" target="_blank" rel="noopener"><img id="radar-img" alt="雷達整合回波圖，疊上過去一小時的閃電位置"><svg id="radar-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true"></svg></a>
     <div class="player" id="r-player" hidden>
       <button type="button" class="btn ghost" id="r-play" aria-label="播放雷達動畫">▶ 播放</button>
@@ -656,7 +674,7 @@ main { touch-action: pan-y; }
   <section class="v-obs" id="o-eq" hidden>
     <h2>最近地震</h2>
     <ul class="eq-list" id="eq-list"></ul>
-    <span class="cap">點有「報告」的地震可以看氣象署的地震報告圖。震度用你選的地點附近 20 公里內的測站，沒有的話用縣市最大震度。</span>
+    <span class="cap">點任一筆會在上面的地圖標出震央，星號越大規模越大；紅色是最新一筆，橘色是 24 小時內。點星號可以看詳細資料和地震報告圖。震度用你選的地點附近 20 公里內的測站，沒有的話用縣市最大震度。</span>
   </section>
   <section class="v-obs" id="o-uv" hidden>
     <h2>紫外線測報</h2>
@@ -1206,6 +1224,7 @@ function fromData(T, D) {
 /* ---------- 地點 ---------- */
 const pname = p => p.c + p.t;
 const seedOf = s => [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7);
+let LLAB = null, TC = null, LMEL = null, LEQ = null, LFAULT = null, eqMarks = {};
 let LMAP = null, LOV = null, LBASE = {}, LMARK = null, RG = null, rgMode = false, baseKind = "photo";
 let TY = null, EQ = null, WARN = null, OB = null, satKind = null, rankKind = "hi", here = null;
 let places = [{ c: "臺北市", t: "中正區" }], active = 0, editing = false, liveOK = false;
@@ -1612,14 +1631,22 @@ function drawTyEq() {
   }
   $("eq-home").innerHTML = homeEq; $("eq-home").hidden = !homeEq;
   $("o-eq").hidden = !qs.length;
-  $("eq-list").innerHTML = qs.slice(0, 6).map(q => {
+  $("eq-bar").hidden = !(qs[0] && LMAP);
+  if (qs[0] && LMAP) { $("eq-bar").innerHTML = `<span class="tag">最新地震</span><span class="tx">M${qs[0].mag}｜${shortLoc(qs[0].loc)}｜${twWhen(Date.parse(qs[0].time)).replace(/ (\d+) 點$/, "")} ${hm(qs[0].time)}</span><span class="chev">›</span>`; }
+  if (LMAP) drawEqLayer();
+  $("eq-list").innerHTML = qs.slice(0, 8).map(q => {
     const t = Date.parse(q.time), hv = eqHere(q, p, h), l = eqLvl(hv.v), [bg, fg] = EQC(l);
-    return `<li${q.img ? ` data-img="${q.img}"` : ""}><span class="eq-int sm" style="background:${bg};color:${fg}"><b>${hv.v ? eqTxt(hv.v).replace(" 級", "") : "0"}</b></span><span class="eq-t"><b>${shortLoc(q.loc)}　規模 ${q.mag}</b><span class="muted">${twWhen(t).replace(/ (\d+) 點$/, "")} ${hm(q.time)}・深 ${q.depth} 公里・你這裡${hv.v ? eqTxt(hv.v) : "無感"}</span></span>${q.img ? '<span class="chev">報告</span>' : ""}</li>`;
+    return `<li data-qi="${qs.indexOf(q)}"><span class="eq-int sm" style="background:${bg};color:${fg}"><b>${hv.v ? eqTxt(hv.v).replace(" 級", "") : "0"}</b></span><span class="eq-t"><b>${shortLoc(q.loc)}　規模 ${q.mag}</b><span class="muted">${twWhen(t).replace(/ (\d+) 點$/, "")} ${hm(q.time)}・深 ${q.depth} 公里・你這裡${hv.v ? eqTxt(hv.v) : "無感"}</span></span><span class="chev">地圖</span></li>`;
   }).join("");
 }
 const dirZh = d => ({ N: "北", NNE: "北北東", NE: "東北", ENE: "東北東", E: "東", ESE: "東南東", SE: "東南", SSE: "南南東", S: "南", SSW: "南南西", SW: "西南", WSW: "西南西", W: "西", WNW: "西北西", NW: "西北", NNW: "北北西" })[String(d || "").toUpperCase()] || (d || "");
 const shortLoc = v => { const m = String(v || "").match(/位於([^)）]+)/); return m ? m[1] : String(v || "").replace(/\s+/g, ""); };
-$("eq-list").addEventListener("click", e => { const li = e.target.closest("[data-img]"); if (li && window.openZoom) openZoom(li.dataset.img, "地震報告圖"); });
+$("eq-list").addEventListener("click", e => {
+  const li = e.target.closest("[data-qi]"); if (!li) return;
+  const q = EQ && EQ.list[Number(li.dataset.qi)]; if (!q) return;
+  if (!flyToQuake(q) && q.img && window.openZoom) openZoom(q.img, "地震報告圖");
+});
+$("eq-bar").addEventListener("click", () => { const q = EQ && EQ.list[0]; if (q) flyToQuake(q); });
 async function loadTyEq() {
   const get = f => fetch("data/" + f, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null);
   [TY, EQ] = await Promise.all([get("typhoon.json"), get("quake.json")]);
@@ -1796,12 +1823,16 @@ async function ensureMap() {
   L.DomEvent.disableClickPropagation($("rmap-me"));
   LOV = L.imageOverlay("data/" + RG.frames[RG.frames.length - 1].file, RG.bounds, { opacity: 0.72, className: "rgov", interactive: false }).addTo(LMAP);
   LMARK = L.layerGroup().addTo(LMAP);
+  LMEL = L.layerGroup().addTo(LMAP);
   LLAB = L.layerGroup().addTo(LMAP);
   LMAP.on("zoomend moveend", drawLabels);
   fetch("data/towncoords.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).then(j => { TC = j; drawLabels(); }).catch(() => {});
   rgMode = true;
+  $("layer-chips").hidden = false;
   drawMapMarks();
   setFrames(RG.frames);
+  drawEqLayer();
+  if (EQ) drawTyEq();
   setTimeout(() => LMAP.invalidateSize(), 50);
   return true;
 }
@@ -1810,13 +1841,13 @@ function drawMapMarks() {
   LMARK.clearLayers();
   const L0 = OB && OB.light;
   if (L0 && L0.pts) L0.pts.forEach(p => L.circleMarker([p[1], p[0]], { radius: p[2] ? 6 : 5, color: p[2] ? "#fff" : "#4a3a00", weight: 2, fillColor: p[2] ? "#ff3b30" : "#ffd400", fillOpacity: 1, interactive: false }).addTo(LMARK));
-  if (here) {
-    L.circleMarker([here.lat, here.lon], { radius: 11, color: "#111", weight: 3, fill: false, interactive: false }).addTo(LMARK);
-    L.circleMarker([here.lat, here.lon], { radius: 4, color: "#111", weight: 2, fillColor: "#fff", fillOpacity: 1, interactive: false }).addTo(LMARK);
+  if (LMEL) LMEL.clearLayers();
+  if (here && LMEL) {
+    L.circleMarker([here.lat, here.lon], { radius: 11, color: "#111", weight: 3, fill: false, interactive: false }).addTo(LMEL);
+    L.circleMarker([here.lat, here.lon], { radius: 4, color: "#111", weight: 2, fillColor: "#fff", fillOpacity: 1, interactive: false }).addTo(LMEL);
   }
 }
 /* 地名：縮小時只標縣市，放大才標鄉鎮，只畫畫面內的 */
-let LLAB = null, TC = null;
 function drawLabels() {
   if (!LMAP || !LLAB || !TC) return;
   LLAB.clearLayers();
@@ -1827,11 +1858,71 @@ function drawLabels() {
       const la = pts.reduce((a, p) => a + p[0], 0) / pts.length, lo = pts.reduce((a, p) => a + p[1], 0) / pts.length; add(la, lo, c, "county"); }
   } else for (const c in TC) for (const t in TC[c]) add(TC[c][t][0], TC[c][t][1], t, "town");
 }
+/* ---------- 地圖圖層：雨區、閃電、地震、斷層 ---------- */
+const LAYERS_ON = (() => { try { return Object.assign({ rain: true, light: true, eq: true, fault: false }, JSON.parse(store.get("mapLayers") || "{}")); } catch (e) { return { rain: true, light: true, eq: true, fault: false }; } })();
+function starIcon(size, fill, stroke) {
+  const s = Math.round(size);
+  return L.divIcon({ className: "eqstar", iconSize: [s, s], iconAnchor: [s / 2, s / 2],
+    html: `<svg viewBox="0 0 24 24" width="${s}" height="${s}"><path d="M12 1.8l3.1 6.6 7.2.9-5.3 5 1.4 7.1L12 17.9 5.6 21.4 7 14.3l-5.3-5 7.2-.9z" fill="${fill}" stroke="${stroke}" stroke-width="1.6" stroke-linejoin="round"/></svg>` });
+}
+function eqPopup(q) {
+  const p = places[active], hv = eqHere(q, p, here), t = Date.parse(q.time);
+  return `<div class="eqpop"><b>${shortLoc(q.loc)}</b><span>規模 <em>${q.mag}</em>・深 ${q.depth} 公里</span><span>${twWhen(t).replace(/ (\d+) 點$/, "")} ${hm(q.time)}</span>` +
+    `<span>你這裡：${hv.v ? eqTxt(hv.v) : "無感"}${hv.v ? `（${hv.how}）` : ""}</span>` + (q.img ? `<a href="#" data-rep="${q.img}">看地震報告圖 ›</a>` : "") + `</div>`;
+}
+function drawEqLayer() {
+  if (!LMAP) return;
+  if (!LEQ) LEQ = L.layerGroup();
+  LEQ.clearLayers(); eqMarks = {};
+  const qs = (EQ && EQ.list) || [];
+  qs.slice().reverse().forEach((q, ri) => {
+    if (q.lat == null || q.lon == null) return;
+    const i = qs.length - 1 - ri, age = (Date.now() - Date.parse(q.time)) / 864e5;
+    const size = Math.max(16, Math.min(44, 8 + (q.mag || 3) * 5.5));
+    const latest = i === 0;
+    const fill = latest ? "#ff3b30" : age < 1 ? "#f08a24" : age < 7 ? "#9aa3ad" : "#c7ccd1";
+    const m = L.marker([q.lat, q.lon], { icon: starIcon(size, fill, "#1c2a33"), zIndexOffset: latest ? 1000 : -Math.round(age * 10), keyboard: false });
+    m.bindPopup(() => eqPopup(q), { autoPanPadding: [20, 60] });
+    m.addTo(LEQ); eqMarks[q.no + "|" + q.time] = m;
+  });
+  syncLayers();
+}
+function syncLayers() {
+  if (!LMAP) return;
+  const want = (layer, on) => { if (!layer) return; if (on && !LMAP.hasLayer(layer)) layer.addTo(LMAP); if (!on && LMAP.hasLayer(layer)) LMAP.removeLayer(layer); };
+  want(LOV, LAYERS_ON.rain); want(LMARK, LAYERS_ON.light); want(LEQ, LAYERS_ON.eq);
+  if (LAYERS_ON.fault && !LFAULT) LFAULT = L.tileLayer.wms("https://geomap.gsmma.gov.tw/mapguide/mapagent/mapagent.fcgi", {
+    layers: "WMS/25K_Geomap_fault_2021", format: "image/png", transparent: true, version: "1.1.1", crs: L.CRS.EPSG4326,
+    maxZoom: 18, opacity: 0.95, className: "faultl", attribution: '斷層 <a href="https://fault.gsmma.gov.tw/" target="_blank" rel="noopener">經濟部地質調查及礦業管理中心</a>' });
+  want(LFAULT, LAYERS_ON.fault);
+  $("r-player").hidden = !LAYERS_ON.rain || (rgMode ? FR.length < 2 : $("r-player").hidden);
+  $("fault-note").hidden = !LAYERS_ON.fault;
+  document.querySelectorAll("#layer-chips [data-l]").forEach(b => { b.classList.toggle("on", !!LAYERS_ON[b.dataset.l]); b.setAttribute("aria-pressed", String(!!LAYERS_ON[b.dataset.l])); });
+}
+$("layer-chips").addEventListener("click", e => {
+  const b = e.target.closest("[data-l]"); if (!b) return;
+  LAYERS_ON[b.dataset.l] = !LAYERS_ON[b.dataset.l];
+  store.set("mapLayers", JSON.stringify(LAYERS_ON));
+  if (b.dataset.l === "eq" && LAYERS_ON.eq) drawEqLayer(); else syncLayers();
+});
+function flyToQuake(q) {
+  if (!LMAP || q.lat == null) return false;
+  if (!LAYERS_ON.eq) { LAYERS_ON.eq = true; store.set("mapLayers", JSON.stringify(LAYERS_ON)); drawEqLayer(); }
+  $("o-radar").scrollIntoView({ behavior: "smooth", block: "start" });
+  LMAP.flyTo([q.lat, q.lon], Math.max(LMAP.getZoom(), 9), { duration: 0.8 });
+  const m = eqMarks[q.no + "|" + q.time]; if (m) setTimeout(() => m.openPopup(), 850);
+  return true;
+}
+document.addEventListener("click", e => {
+  const a = e.target.closest("[data-rep]"); if (!a) return;
+  e.preventDefault(); if (window.openZoom) openZoom(a.dataset.rep, "地震報告圖");
+});
 $("base-tabs").addEventListener("click", e => {
   const b = e.target.closest("[data-b]"); if (!b || !LMAP) return;
   LMAP.removeLayer(LBASE[baseKind]); baseKind = b.dataset.b; LBASE[baseKind].addTo(LMAP);
   $("rmap").classList.toggle("plain", baseKind === "map");
   if (LOV) LOV.bringToFront();
+  if (LFAULT && LMAP.hasLayer(LFAULT)) LFAULT.bringToFront();
   $("base-tabs").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
 });
 $("rmap-me").addEventListener("click", e => { e.stopPropagation(); if (LMAP && here) LMAP.setView([here.lat, here.lon], 11); });

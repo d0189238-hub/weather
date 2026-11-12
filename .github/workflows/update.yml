@@ -24,13 +24,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: 斷層圖層診斷（暫時）
-        if: github.event_name == 'workflow_dispatch'
-        continue-on-error: true
-        run: |
-          B="https://geomap.gsmma.gov.tw/mapguide/mapagent/mapagent.fcgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=WMS/25K_Geomap_fault_2021&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&WIDTH=400&HEIGHT=400"
-          curl -s -m 40 "$B&SRS=EPSG:4326&BBOX=120.45,23.95,120.95,24.45" -o a.png; echo "WMSIMG A $(file -b a.png | cut -c1-40) $(base64 -w0 a.png)"
-          curl -s -m 40 "$B&SRS=EPSG:3857&BBOX=13408000,2983000,13464000,3039000" -o b.png; echo "WMSIMG B $(file -b b.png | cut -c1-40) $(base64 -w0 b.png | cut -c1-60000)"
       - name: 安裝圖片與推播套件
         run: npm install --no-save --no-package-lock --no-audit --no-fund pngjs@7 jpeg-js@0.4 web-push@3
       - name: 抓取中央氣象署與環境部資料
