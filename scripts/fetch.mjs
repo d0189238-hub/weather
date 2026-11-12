@@ -138,11 +138,13 @@ function hourly(loc) {
   }
   return rows;
 }
+// 氣象署天氣代碼：08–22、29–41 是有雨的天氣
+const isRainCode = c => { const n = Number(c); return (n >= 8 && n <= 22) || (n >= 29 && n <= 41); };
 function daily(loc) {
   const days = new Map();
   for (const [t, v] of timeline(loc, "week")) {
     const date = t.slice(0, 10), hour = Number(t.slice(11, 13));
-    const d = days.get(date) || { hi: null, lo: null, pop: null, wc: null, uvi: null };
+    const d = days.get(date) || { hi: null, lo: null, pop: null, wc: null, uvi: null, wet: 0 };
     const hi = num(ci(v, "MaxTemperature")), lo = num(ci(v, "MinTemperature")), pop = num(ci(v, "ProbabilityOfPrecipitation")), uvi = num(ci(v, "UVIndex"));
     if (hi !== null) d.hi = d.hi === null ? hi : Math.max(d.hi, hi);
     if (lo !== null) d.lo = d.lo === null ? lo : Math.min(d.lo, lo);
@@ -150,9 +152,10 @@ function daily(loc) {
     if (uvi !== null) d.uvi = d.uvi === null ? uvi : Math.max(d.uvi, uvi);
     const c = ci(v, "WeatherCode");
     if (c !== undefined && (d.wc === null || (hour >= 5 && hour <= 7))) d.wc = String(c);
+    if (c !== undefined && isRainCode(c)) d.wet |= hour >= 5 && hour < 17 ? 1 : 2;   // 1 白天有雨、2 晚上有雨
     days.set(date, d);
   }
-  return [...days.entries()].sort().map(([date, d]) => [date, d.hi, d.lo, d.wc, d.pop, d.uvi]);
+  return [...days.entries()].sort().map(([date, d]) => [date, d.hi, d.lo, d.wc, d.pop, d.uvi, d.wet]);
 }
 
 function stations(json) {
@@ -873,10 +876,54 @@ async function main() {
         }
         return (cache[key] = out);
       };
+      // 每天晚上 8 點：依你選的地點，一則簡短的明天＋這週重點
+      const twNow = new Date(now + 8 * 3600e3), todayStr = twNow.toISOString().slice(0, 10), digestTime = twH === 20;
+      const WK = ["日", "一", "二", "三", "四", "五", "六"];
+      const dayName = (date, ahead) => { const wd = new Date(date + "T00:00:00Z").getUTCDay(); return ahead === 1 ? "明天" : ahead === 2 ? "後天" : ((ahead >= 7 || (wd !== 0 && wd <= twNow.getUTCDay()) || (twNow.getUTCDay() === 0 && wd !== 0)) ? "下週" : "週") + WK[wd]; };
+      const digestFor = s => {
+        const pl = (s.places || []).slice(0, 4).map(p => ({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, T: townData[p.c + "|" + p.t] })).filter(x => x.T && x.T.w && x.T.w.length);
+        if (!pl.length) return null;
+        const dayRows = date => pl.map(x => x.T.w.find(r => r[0] === date)).filter(Boolean);
+        const dates = [...new Set(pl.flatMap(x => x.T.w.map(r => r[0])))].filter(d => d > todayStr).sort().slice(0, 7);
+        if (!dates.length) return null;
+        const ahead = d => Math.round((Date.parse(d) - Date.parse(todayStr)) / 864e5);
+        // 明天
+        const t1 = dates[0], R = dayRows(t1);
+        const temps = pl.map(x => { const r = x.T.w.find(r => r[0] === t1); return r && r[1] != null ? `${x.name} ${Math.round(r[2])}～${Math.round(r[1])}°` : null; }).filter(Boolean);
+        const pop = Math.max(...R.map(r => r[4] ?? 0)), wet = R.reduce((a, r) => a | (r[6] || 0), 0);
+        const verdict = pop >= 60 || wet & 1 ? "有雨，衣服室內晾" : wet & 2 ? "白天好曬，晚上有雨，傍晚前收" : pop >= 30 ? "可能有短暫雨，曬了早點收" : "整天好曬";
+        let body = `明天 ${temps.join("、")}，${verdict}。`;
+        // 這週重點：最先遇到的雨天、明顯轉涼、很熱（最多兩件）
+        const notes = [], hiOf = d => { const rs = dayRows(d).filter(r => r[1] != null); return rs.length ? [Math.min(...rs.map(r => r[1])), Math.max(...rs.map(r => r[1]))] : null; };
+        const rest = dates.slice(1);
+        const rainDay = rest.find(d => dayRows(d).some(r => (r[4] ?? 0) >= 50 || r[6]));
+        if (rainDay) { const w = dayRows(rainDay).reduce((a, r) => a | (r[6] || 0), 0); notes.push({ d: rainDay, t: `${dayName(rainDay, ahead(rainDay))}${w === 2 ? "晚上" : ""}有雨` }); }
+        let prevMax = hiOf(t1) ? hiOf(t1)[1] : null;
+        for (const d of rest) { const h = hiOf(d); if (!h) continue; if (prevMax != null && prevMax - h[1] >= 5) { notes.push({ d, t: `${dayName(d, ahead(d))}轉涼，高溫只剩 ${h[0] === h[1] ? h[1] : h[0] + "～" + h[1]}°` }); break; } prevMax = Math.max(prevMax ?? h[1], h[1]); }
+        const hot = rest.find(d => { const h = hiOf(d); return h && h[1] >= 33; });
+        if (hot && notes.length < 2) notes.push({ d: hot, t: `${dayName(hot, ahead(hot))}高溫 ${hiOf(hot)[1]}°，很熱` });
+        notes.sort((a, b) => a.d < b.d ? -1 : 1);
+        body += notes.length ? notes.slice(0, 2).map(n => n.t).join("，") + "。" : "這週大致穩定。";
+        return { title: "曬衣服嗎・明天", body };
+      };
+      const sendDigest = async (s, sh) => {
+        if (!digestTime) return;
+        const k = hash(sh + "|dg|" + todayStr); if (state.sent[k]) return;
+        const d = digestFor(s); if (!d) return;
+        try {
+          await libs.push.sendNotification(s.sub, JSON.stringify({ title: d.title, body: d.body, tag: "daily", url: site || "./" }),
+            { TTL: 3 * 3600, urgency: "normal", vapidDetails: { subject: site || "https://github.com", publicKey: s.pub, privateKey: s.priv } });
+          state.sent[k] = now; digests++;
+          if (!status.seen.digestSample) status.seen.digestSample = d.body;
+        } catch (e) { if (e.statusCode !== 404 && e.statusCode !== 410) fail("每日預報通知", (e.statusCode || "") + " " + String(e.body || e.message || "").slice(0, 120)); }
+      };
+      if (process.env.DIGEST_PREVIEW) { for (const s of subs) { const d = digestFor(s); if (d) { status.seen.digestPreview = d.body; break; } } }
+      let digests = 0;
       const dead = [];
       let sent = 0, failed = 0;
       const one = async s => {
         const sh = hash(s.id + "|" + (s.sub && s.sub.endpoint)), lines = [], keys = [];
+        await sendDigest(s, sh);
         const seenText = new Set();
         for (const p of (s.places || []).slice(0, 8)) for (const a of alertsFor(p)) {
           const k = hash(sh + "|" + a.k);
@@ -903,7 +950,7 @@ async function main() {
         try { await getJSON(PUSH_API.replace(/\/+$/, "") + "/prune", { method: "POST", headers: { Authorization: "Bearer " + PUSH_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify({ ids: dead }) }); }
         catch (e) { fail("清除失效訂閱", e); }
       }
-      status.seen.push = { subs: subs.length, sent, failed, removed: dead.length, quiet };
+      status.seen.push = { subs: subs.length, sent, failed, removed: dead.length, quiet, digests };
       await writeFile(OUT + "/push-state.json", JSON.stringify(state));
     } catch (e) { fail("下雨通知", e); }
   }

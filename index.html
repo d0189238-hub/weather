@@ -509,7 +509,7 @@ main { touch-action: pan-y; }
 .tips .item.off svg.gi { opacity: .4; }
 .tips .item.off svg.gi .a { fill: var(--cloth); }
 
-.note { color: var(--muted); padding-top: var(--s2); border-top: 1px solid var(--line); }
+.note { color: var(--muted); padding-top: var(--s2); border-top: 1px solid var(--line); font-size: 12px; line-height: 1.6; opacity: .75; font-family: "Noto Sans TC", sans-serif; }
 .note[hidden], .hist[hidden] { display: none; }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1329,7 +1329,7 @@ function fromData(T, D) {
   return {
     sample: false,
     time: (D.updated || (o && o.time) || "").slice(11, 16),
-    source: "資料來源：中央氣象署" + (o ? "（觀測站：" + o.station + (o.time ? "，" + o.time.slice(11, 16) + " 觀測" : "") + "）" : "") + (a ? "、環境部（測站：" + a.site + "）" : "") + "。本頁每半小時抓一次最新資料；預報內容以氣象署發布為準，空氣品質為環境部每小時發布。",
+    source: "資料來源：中央氣象署" + (o ? "（觀測站：" + o.station + (o.time ? "，" + o.time.slice(11, 16) + " 觀測" : "") + "）" : "") + (a ? "、環境部（測站：" + a.site + "）" : "") + "。每 10 分鐘更新；預報以氣象署發布為準。",
     cur: {
       temp: o && o.temp != null ? o.temp : h0.temp, feels: h0.feels, hum: o ? o.rh : null, precip: o && o.rain != null ? o.rain : 0,
       wind: o ? o.ws : null, wdir: o ? o.wd : null, code: h0.code, desc: h0.text, isDay: nowDay, uv: nowDay ? uvOf(today) : 0
