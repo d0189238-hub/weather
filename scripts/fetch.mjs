@@ -387,15 +387,16 @@ async function main() {
       const j = await getJSON(cwaUrl("W-C0034-005"));
       status.seen.typhoonShape = shape(ci(j, "records"));
       const coord = v => { const m = String(v || "").match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/); if (!m) return null; let a = Number(m[1]), b = Number(m[2]); return a < b ? { lat: a, lon: b } : { lon: a, lat: b }; };
-      const radius = o => { if (o == null) return null; if (typeof o !== "object") return num(o); return num(ci(o, "radius")) ?? null; };
-      const fixOf = (f, base) => {
-        const c = coord(ci(f, "coordinate")); if (!c) return null;
-        let t = ci(f, "fixTime", "forecastTime", "initTime");
-        const tau = num(ci(f, "tau"));
-        if (!t && base && tau !== null) t = new Date(Date.parse(base) + tau * 3600e3).toISOString();
-        return { t, lat: c.lat, lon: c.lon, wind: num(ci(f, "maxWindSpeed")), gust: num(ci(f, "maxGustSpeed")), p: num(ci(f, "pressure")),
-          spd: num(ci(f, "movingSpeed")), dir: ci(f, "movingDirection") || null,
-          r7: radius(ci(f, "circleOf15Ms")), r10: radius(ci(f, "circleOf25Ms")), prob: num(ci(f, "radiusOf70PercentProbability")) };
+      const radius = o => { if (o == null) return null; if (typeof o !== "object") return num(o); return num(ci(o, "Radius", "radius")) ?? null; };
+      const fixOf = f => {
+        let lat = num(ci(f, "CoordinateLatitude")), lon = num(ci(f, "CoordinateLongitude"));
+        if (lat === null || lon === null) { const c = coord(ci(f, "coordinate")); if (!c) return null; lat = c.lat; lon = c.lon; }
+        let t = ci(f, "DateTime", "fixTime");
+        const init = ci(f, "InitialTime", "initTime"), tau = num(ci(f, "ForecastHour", "tau"));
+        if (!t && init && tau !== null) t = new Date(Date.parse(init) + tau * 3600e3).toISOString();
+        return { t, lat, lon, wind: num(ci(f, "MaxWindSpeed")), gust: num(ci(f, "MaxGustSpeed")), p: num(ci(f, "Pressure")),
+          spd: num(ci(f, "MovingSpeed")), dir: ci(f, "MovingDirection") || null,
+          r7: radius(ci(f, "Circle15ms", "circleOf15Ms")), r10: radius(ci(f, "Circle25ms", "circleOf25Ms")), prob: num(ci(f, "Radius70PercentProbability", "radiusOf70PercentProbability")) };
       };
       const tcs = arr(ci(ci(ci(j, "records"), "tropicalCyclones"), "tropicalCyclone"));
       if (tcs[0]) {
@@ -404,8 +405,7 @@ async function main() {
       }
       for (const tc of tcs) {
         const past = arr(ci(ci(tc, "analysisData"), "fix")).map(f => fixOf(f)).filter(Boolean);
-        const base = past.length ? past[past.length - 1].t : null;
-        const fc = arr(ci(ci(tc, "forecastData"), "fix")).map(f => fixOf(f, base)).filter(Boolean);
+        const fc = arr(ci(ci(tc, "forecastData"), "fix")).map(f => fixOf(f)).filter(Boolean);
         if (past.length || fc.length) typhoons.push({ name: ci(tc, "cwaTyphoonName") || ci(tc, "typhoonName") || "熱帶性低氣壓", en: ci(tc, "typhoonName") || "", no: ci(tc, "cwaTdNo", "cwaTyNo") || null, past, fc });
       }
       status.seen.typhoons = typhoons.length;

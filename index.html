@@ -165,6 +165,38 @@ svg.ic .wet { stroke: var(--rain); }
 /* 現在 */
 .hero { padding-top: 8px; }
 .laundry { padding-top: 4px; }
+.tyeq[hidden], #o-ty[hidden], #o-eq[hidden] { display: none; }
+.tyeq { padding: 4px 0 8px; }
+.tyeq .tap.ty-card, .tyeq .tap.eq-card { display: grid; text-align: left; justify-items: start; grid-template-columns: auto 1fr; gap: 14px; align-items: center; padding: 12px; border-radius: 10px; background: color-mix(in srgb, var(--paper) 70%, var(--cloth)); border: 1px solid var(--line); }
+.ty-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ty-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ty-h b { font-size: 22px; } .ty-h span { color: var(--muted); font-size: 16px; }
+.ty-msg em, .ty-msg b { font-style: normal; font-family: var(--display); font-weight: 600; font-size: 26px; }
+.ty-alert { color: var(--bad); font-weight: 700; }
+.ty-sea { fill: color-mix(in srgb, var(--rain) 18%, var(--paper)); }
+.ty-land { fill: var(--paper); stroke: var(--muted); stroke-width: 1; stroke-linejoin: round; }
+.ty-past { fill: none; stroke: var(--bad); stroke-width: 2.2; stroke-linejoin: round; }
+.ty-fc { fill: none; stroke: var(--bad); stroke-width: 2; stroke-dasharray: 5 4; stroke-linejoin: round; }
+.ty-cone { fill: var(--bad); opacity: .1; }
+.ty-dot { fill: var(--bad); }
+.ty-r7 { fill: color-mix(in srgb, var(--bad) 10%, transparent); stroke: var(--bad); stroke-width: 1.3; stroke-dasharray: 3 3; }
+.ty-r10 { fill: none; stroke: var(--bad); stroke-width: 1; }
+.ty-eye { fill: var(--bad); stroke: #fff; stroke-width: 1.5; }
+.ty-me { fill: var(--ink); stroke: var(--paper); stroke-width: 1.5; }
+.ty-map svg { width: 100%; height: auto; display: block; }
+.ty-block { display: flex; flex-direction: column; gap: 10px; }
+.ty-list, .eq-list { list-style: none; margin: 0; padding: 0; }
+.ty-list li { display: grid; grid-template-columns: 1fr 1.2fr auto; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 17px; }
+.ty-list li.hd { color: var(--muted); font-size: 15px; border-top: 0; }
+.ty-list li.near { color: var(--bad); font-weight: 700; }
+.ty-list b { font-family: var(--display); font-weight: 600; text-align: right; }
+.eq-int { width: 58px; height: 58px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+.eq-int b { font-family: var(--display); font-weight: 600; font-size: 28px; } .eq-int small { font-size: 13px; }
+.eq-int.sm { width: 42px; height: 42px; } .eq-int.sm b { font-size: 20px; }
+.eq-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.eq-list li[data-img] { cursor: pointer; }
+.eq-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.eq-t .muted { font-size: 15px; }
 .offl { margin: 0 0 8px; padding: 10px 14px; border-radius: 8px; background: var(--cloth); font-size: 16px; }
 .offl[hidden] { display: none; }
 .ld { display: grid; grid-template-columns: 56px 1fr; gap: 14px; align-items: start; }
@@ -409,6 +441,8 @@ main { touch-action: pan-y; }
   <div class="dots" id="dots" role="tablist" aria-label="我的地點" hidden></div>
   <p class="offl" id="offline" role="status" hidden>目前沒有網路，下面是上次存下的資料，時間以頁首的更新時間為準。</p>
   <div class="warn v-home" id="warn" role="alert" hidden></div>
+  <section class="v-home tyeq" id="ty-home" hidden></section>
+  <section class="v-home tyeq" id="eq-home" hidden></section>
   <div class="top v-sub">
     <button type="button" class="btn ghost" id="back">‹ 返回</button>
     <strong id="sub-title"></strong>
@@ -569,6 +603,10 @@ main { touch-action: pan-y; }
   </section>
 
   <!-- 觀測 -->
+  <section class="v-obs" id="o-ty" hidden>
+    <h2>颱風動態</h2>
+    <div id="ty-body"></div>
+  </section>
   <section class="v-obs" id="o-radar" hidden>
     <h2>雷達回波・閃電</h2>
     <a class="map" id="radar-link" target="_blank" rel="noopener"><img id="radar-img" alt="雷達整合回波圖，疊上過去一小時的閃電位置"><svg id="radar-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true"></svg></a>
@@ -594,6 +632,11 @@ main { touch-action: pan-y; }
     <h2>溫度分布</h2>
     <a class="map" id="temp-link" target="_blank" rel="noopener"><img id="temp-img" alt="全臺溫度分布圖" loading="lazy"></a>
     <span class="cap" id="temp-cap"></span>
+  </section>
+  <section class="v-obs" id="o-eq" hidden>
+    <h2>最近地震</h2>
+    <ul class="eq-list" id="eq-list"></ul>
+    <span class="cap">點有「報告」的地震可以看氣象署的地震報告圖。震度用你選的地點附近 20 公里內的測站，沒有的話用縣市最大震度。</span>
   </section>
   <section class="v-obs" id="o-uv" hidden>
     <h2>紫外線測報</h2>
@@ -1143,7 +1186,7 @@ function fromData(T, D) {
 /* ---------- 地點 ---------- */
 const pname = p => p.c + p.t;
 const seedOf = s => [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7);
-let WARN = null, OB = null, satKind = "ir", rankKind = "hi", here = null;
+let TY = null, EQ = null, WARN = null, OB = null, satKind = "ir", rankKind = "hi", here = null;
 let places = [{ c: "臺北市", t: "中正區" }], active = 0, editing = false, liveOK = false;
 try {
   const saved = JSON.parse(store.get("places") || "null");
@@ -1166,12 +1209,13 @@ async function load() {
   $("place-name").textContent = pname(p);
   renderDots();
   if (WARN) drawWarn();
+  if (TY || EQ) drawTyEq();
   if ($("app").dataset.view !== "home") $("sub-title").textContent = pname(p) + "・" + VIEWS[$("app").dataset.view];
   tab = 0;
   render(sample(c.lat, seedOf(pname(p))));            // 先有畫面
   try {
     const D = await countyData(p.c), T = D.towns[p.t];
-    if (T && places[active] === p) { const d = fromData(T, D); liveOK = true; render(d); if (T.lat != null && T.lon != null) { here = { lat: T.lat, lon: T.lon }; drawObs(); } }
+    if (T && places[active] === p) { const d = fromData(T, D); liveOK = true; render(d); if (T.lat != null && T.lon != null) { here = { lat: T.lat, lon: T.lon }; drawObs(); if (TY || EQ) drawTyEq(); } }
   } catch (e) { /* 讀不到就留在示範資料 */ }
 }
 
@@ -1442,6 +1486,125 @@ $("a-ok").addEventListener("click", () => {
 load();
 setView(location.hash.slice(1));
 
+/* ---------- 颱風與地震 ---------- */
+const TW_OUTLINE = [[121.54,25.3],[121.74,25.15],[122.0,25.01],[121.87,24.84],[121.86,24.59],[121.62,23.98],[121.51,23.48],[121.38,23.1],[121.15,22.75],[120.9,22.34],[120.85,21.9],[120.72,21.93],[120.59,22.37],[120.27,22.62],[120.15,23.0],[120.08,23.15],[120.18,23.7],[120.31,23.97],[120.5,24.27],[120.67,24.49],[120.9,24.83],[121.08,25.05],[121.41,25.18]];
+const tyLevel = w => w == null ? "" : w >= 51 ? "強烈颱風" : w >= 32.7 ? "中度颱風" : w >= 17.2 ? "輕度颱風" : "熱帶性低氣壓";
+const tms = v => { const t = Date.parse(v); return isNaN(t) ? null : t; };
+const twWhen = ms => { const w = new Date(ms + 8 * 3600e3), today = new Date(Date.now() + 8 * 3600e3);
+  const dd = Math.round((Date.UTC(w.getUTCFullYear(), w.getUTCMonth(), w.getUTCDate()) - Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())) / 864e5);
+  return (dd === 0 ? "今天" : dd === 1 ? "明天" : dd === 2 ? "後天" : (w.getUTCMonth() + 1) + "/" + w.getUTCDate()) + " " + w.getUTCHours() + " 點"; };
+function tyTrack(t) {
+  const pts = [];
+  const last = t.past[t.past.length - 1];
+  if (last) pts.push(last);
+  t.fc.forEach(f => { if (!last || tms(f.t) > tms(last.t)) pts.push(f); });
+  return pts.filter(p => tms(p.t) != null);
+}
+function tyClosest(t, h) {
+  const pts = tyTrack(t); if (!pts.length || !h) return null;
+  let best = null;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[i + 1] || a, ta = tms(a.t), tb = tms(b.t), steps = b === a ? 0 : Math.max(1, Math.round((tb - ta) / 3600e3));
+    for (let k = 0; k <= steps; k++) {
+      const f = steps ? k / steps : 0, lat = a.lat + (b.lat - a.lat) * f, lon = a.lon + (b.lon - a.lon) * f;
+      const r7 = a.r7 != null && b.r7 != null ? a.r7 + (b.r7 - a.r7) * f : (a.r7 ?? b.r7);
+      const d = kmTo(h.lat, h.lon, lat, lon), ms = ta + (tb - ta) * f;
+      if (!best || d < best.d) best = { d, ms, r7 };
+    }
+  }
+  const nowD = kmTo(h.lat, h.lon, pts[0].lat, pts[0].lon);
+  return { ...best, now: nowD, inside: best && best.r7 != null && best.d <= best.r7, ahead: best && best.ms > Date.now() + 30 * 60e3 };
+}
+function tyMap(t, h, W, H, small) {
+  const pts = tyTrack(t), all = t.past.concat(t.fc);
+  let lo0 = 119.3, lo1 = 122.3, la0 = 21.7, la1 = 25.5;
+  all.forEach(p => { lo0 = Math.min(lo0, p.lon); lo1 = Math.max(lo1, p.lon); la0 = Math.min(la0, p.lat); la1 = Math.max(la1, p.lat); });
+  if (h) { lo0 = Math.min(lo0, h.lon); lo1 = Math.max(lo1, h.lon); la0 = Math.min(la0, h.lat); la1 = Math.max(la1, h.lat); }
+  const k = Math.cos((la0 + la1) / 2 * Math.PI / 180), pad = 0.12;
+  let w = (lo1 - lo0) * k, hgt = la1 - la0;
+  const sc = Math.min(W / (w * (1 + 2 * pad)), H / (hgt * (1 + 2 * pad)));
+  const cx = (lo0 + lo1) / 2, cy = (la0 + la1) / 2;
+  const X = lon => W / 2 + (lon - cx) * k * sc, Y = lat => H / 2 - (lat - cy) * sc, R = km => km / 111 * sc;
+  const line = list => list.map(p => X(p.lon).toFixed(1) + "," + Y(p.lat).toFixed(1)).join(" ");
+  let s = `<rect width="${W}" height="${H}" rx="8" class="ty-sea"/>`;
+  s += `<polygon class="ty-land" points="${TW_OUTLINE.map(([a, b]) => X(a).toFixed(1) + "," + Y(b).toFixed(1)).join(" ")}"/>`;
+  if (!small) t.fc.forEach(f => { if (f.prob) s += `<circle class="ty-cone" cx="${X(f.lon).toFixed(1)}" cy="${Y(f.lat).toFixed(1)}" r="${R(f.prob).toFixed(1)}"/>`; });
+  if (t.past.length > 1) s += `<polyline class="ty-past" points="${line(t.past)}"/>`;
+  if (pts.length > 1) s += `<polyline class="ty-fc" points="${line(pts)}"/>`;
+  if (!small) t.fc.forEach(f => { s += `<circle class="ty-dot" cx="${X(f.lon).toFixed(1)}" cy="${Y(f.lat).toFixed(1)}" r="2.5"/>`; });
+  const c = pts[0];
+  if (c) {
+    if (c.r7) s += `<circle class="ty-r7" cx="${X(c.lon).toFixed(1)}" cy="${Y(c.lat).toFixed(1)}" r="${Math.max(3, R(c.r7)).toFixed(1)}"/>`;
+    if (c.r10) s += `<circle class="ty-r10" cx="${X(c.lon).toFixed(1)}" cy="${Y(c.lat).toFixed(1)}" r="${Math.max(2, R(c.r10)).toFixed(1)}"/>`;
+    s += `<circle class="ty-eye" cx="${X(c.lon).toFixed(1)}" cy="${Y(c.lat).toFixed(1)}" r="${small ? 4 : 5}"/>`;
+  }
+  if (h) s += `<circle class="ty-me" cx="${X(h.lon).toFixed(1)}" cy="${Y(h.lat).toFixed(1)}" r="${small ? 3 : 4}"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${t.name}颱風路徑示意圖">${s}</svg>`;
+}
+const EQC = l => l >= 7 ? ["#4a148c", "#fff"] : l >= 6.5 ? ["#6a1b9a", "#fff"] : l >= 6 ? ["#9c27b0", "#fff"] : l >= 5.5 ? ["#c62828", "#fff"] : l >= 5 ? ["#e0412b", "#fff"] : l >= 4 ? ["#f08a24", "#1c2a33"] : l >= 3 ? ["#f6c142", "#1c2a33"] : l >= 2 ? ["#f2e86d", "#1c2a33"] : l >= 1 ? ["#c7e9c0", "#1c2a33"] : ["var(--cloth)", "var(--muted)"];
+const eqLvl = v => { const m = String(v || "").match(/(\d)\s*級?\s*(弱|強)?/); return m ? Number(m[1]) + (m[2] === "強" ? .5 : 0) : 0; };
+const eqTxt = v => { const m = String(v || "").match(/(\d)\s*級?\s*(弱|強)?/); return m ? m[1] + (m[2] || "") + " 級" : "—"; };
+function eqHere(q, p, h) {
+  let best = null;
+  if (h) q.stations.forEach(s => { const d = kmTo(h.lat, h.lon, s[1], s[2]); if (d <= 20 && (!best || d < best.d)) best = { d, name: s[0], v: s[3] }; });
+  if (best) return { v: best.v, how: `附近測站 ${best.name}` };
+  const cv = p && (q.counties[p.c] || q.counties[p.c.replace("臺", "台")]);
+  if (cv) return { v: cv, how: `${p.c}最大震度` };
+  return { v: null, how: "你這裡沒有列入報告，應該無感" };
+}
+function drawTyEq() {
+  const p = places[active], h = here;
+  // 颱風
+  const tys = TY && TY.list || [];
+  let homeTy = "", obsTy = "";
+  tys.forEach(t => {
+    const c = tyTrack(t)[0]; if (!c) return;
+    const cl = tyClosest(t, h), lv = tyLevel(c.wind);
+    const head = `<div class="ty-h"><b>${t.name}</b><span>${t.en ? t.en + "・" : ""}${lv}</span></div>`;
+    let msg;
+    if (!cl) msg = "";
+    else if (cl.ahead && cl.d < cl.now - 20) msg = `${twWhen(cl.ms)}最接近，距離約 <em>${Math.round(cl.d)}</em> 公里`;
+    else msg = `目前距離約 <em>${Math.round(cl.now)}</em> 公里，${cl.now > 1000 ? "距離還很遠" : "正在遠離"}`;
+    const warn = cl && cl.inside ? `<span class="ty-alert">${cl.ahead ? twWhen(cl.ms) + "前後" : "現在"}可能進入暴風圈</span>` : "";
+    const move = c.dir || c.spd ? `往${dirZh(c.dir)}走${c.spd ? `，每小時 ${Math.round(c.spd)} 公里` : ""}` : "";
+    if (cl && cl.d < 800) homeTy += `<div class="tap ty-card" role="button" tabindex="0" data-go="obs">${tyMap(t, h, 110, 110, true)}<div class="ty-txt">${head}<span class="ty-msg">${msg}</span>${warn}<span class="muted">${move}</span></div></div>`;
+    const tr = tyTrack(t), nearI = cl && cl.ahead ? tr.reduce((bi, f, i) => Math.abs(tms(f.t) - cl.ms) < Math.abs(tms(tr[bi].t) - cl.ms) ? i : bi, 0) : -1;
+    const rows = tr.map((f, i) => { const d = h ? Math.round(kmTo(h.lat, h.lon, f.lat, f.lon)) : null;
+      return `<li class="${i === nearI ? "near" : ""}"><span>${i === 0 ? "現在" : twWhen(tms(f.t))}</span><span>${tyLevel(f.wind).replace("颱風", "")}${f.wind ? `・${Math.round(f.wind)} m/s` : ""}</span><b>${d == null ? "" : d + " 公里"}</b></li>`; }).join("");
+    obsTy += `<div class="ty-block">${head}<p class="ty-msg">${msg}</p>${warn}<div class="ty-map">${tyMap(t, h, 340, 300, false)}</div>
+      <p class="cap">實線是走過的路徑，虛線是預測路徑，淡色圓圈是 70% 機率會經過的範圍；紅色虛線圈是七級風暴風圈，黑點是你選的地點。示意圖的海岸線是簡化過的。</p>
+      <ol class="ty-list"><li class="hd"><span>時間</span><span>強度</span><b>離你</b></li>${rows}</ol></div>`;
+  });
+  $("ty-home").innerHTML = homeTy; $("ty-home").hidden = !homeTy;
+  $("o-ty").hidden = !obsTy; $("ty-body").innerHTML = obsTy;
+  // 地震
+  const qs = EQ && EQ.list || [];
+  let homeEq = "";
+  const latest = qs[0];
+  if (latest) {
+    const t = Date.parse(latest.time), hv = eqHere(latest, p, h), l = eqLvl(hv.v);
+    if (Date.now() - t < 24 * 3600e3 && l >= 1) {
+      const [bg, fg] = EQC(l);
+      homeEq = `<div class="tap eq-card" role="button" tabindex="0" data-go="obs"><span class="eq-int" style="background:${bg};color:${fg}"><b>${eqTxt(hv.v).replace(" 級", "")}</b><small>級</small></span><div class="ty-txt"><span class="muted">地震・${twWhen(t).replace(/ (\d+) 點$/, "")} ${hm(latest.time)}</span><b>${shortLoc(latest.loc)}　規模 ${latest.mag}</b><span class="muted">你這裡震度 ${eqTxt(hv.v)}（${hv.how}），深 ${latest.depth} 公里</span></div></div>`;
+    }
+  }
+  $("eq-home").innerHTML = homeEq; $("eq-home").hidden = !homeEq;
+  $("o-eq").hidden = !qs.length;
+  $("eq-list").innerHTML = qs.slice(0, 6).map(q => {
+    const t = Date.parse(q.time), hv = eqHere(q, p, h), l = eqLvl(hv.v), [bg, fg] = EQC(l);
+    return `<li${q.img ? ` data-img="${q.img}"` : ""}><span class="eq-int sm" style="background:${bg};color:${fg}"><b>${hv.v ? eqTxt(hv.v).replace(" 級", "") : "0"}</b></span><span class="eq-t"><b>${shortLoc(q.loc)}　規模 ${q.mag}</b><span class="muted">${twWhen(t).replace(/ (\d+) 點$/, "")} ${hm(q.time)}・深 ${q.depth} 公里・你這裡${hv.v ? eqTxt(hv.v) : "無感"}</span></span>${q.img ? '<span class="chev">報告</span>' : ""}</li>`;
+  }).join("");
+}
+const dirZh = d => ({ N: "北", NNE: "北北東", NE: "東北", ENE: "東北東", E: "東", ESE: "東南東", SE: "東南", SSE: "南南東", S: "南", SSW: "南南西", SW: "西南", WSW: "西南西", W: "西", WNW: "西北西", NW: "西北", NNW: "北北西" })[String(d || "").toUpperCase()] || (d || "");
+const shortLoc = v => { const m = String(v || "").match(/位於([^)）]+)/); return m ? m[1] : String(v || "").replace(/\s+/g, ""); };
+$("eq-list").addEventListener("click", e => { const li = e.target.closest("[data-img]"); if (li && window.openZoom) openZoom(li.dataset.img, "地震報告圖"); });
+async function loadTyEq() {
+  const get = f => fetch("data/" + f, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null);
+  [TY, EQ] = await Promise.all([get("typhoon.json"), get("quake.json")]);
+  drawTyEq();
+}
+loadTyEq();
+
 /* ---------- 天氣警特報 ---------- */
 function drawWarn() {
   const el = $("warn"), p = places[active];
@@ -1669,6 +1832,7 @@ async function refresh() {
   } catch (e) {}
   loadObs();
   loadWarn();
+  loadTyEq();
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 setInterval(() => { if (!document.hidden) refresh(); }, 5 * 60e3);
