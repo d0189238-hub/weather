@@ -245,11 +245,16 @@ main { touch-action: pan-y; }
 .uvgrid div { display: flex; justify-content: space-between; gap: 6px; padding: 6px 10px; border-radius: 6px; background: var(--cloth); font-size: 16px; }
 .uvgrid b { font-weight: 600; }
 .uvk { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
-.rank { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); }
-.rank ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 16px; }
-.rank li { display: flex; justify-content: space-between; gap: 4px; }
-.rank li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rank h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.rank { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.rank li { display: grid; grid-template-columns: 32px 1fr auto; align-items: baseline; gap: 12px; padding: 10px 0; }
+.rank li + li { border-top: 1px solid var(--line); }
+.rank .no { font-family: var(--display); font-weight: 500; font-size: 20px; color: var(--muted); }
+.rank .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank .nm b { font-weight: 600; margin-right: 8px; }
+.rank .nm span { color: var(--muted); font-size: 16px; }
+.rank .v { font-family: var(--display); font-weight: 500; font-size: 26px; line-height: 1; }
+.rank li:first-child .no, .rank li:first-child .v { color: var(--c, var(--ink)); }
+.rank li:first-child .v { font-size: 34px; }
 .top.v-sub { color: var(--ink); justify-content: flex-start; }
 .top.v-sub strong { font-size: 20px; font-weight: 600; min-width: 0; }
 #back { white-space: nowrap; flex: none; }
@@ -539,8 +544,8 @@ main { touch-action: pan-y; }
     <div class="uvgrid" id="uv-grid"></div>
   </section>
   <section class="v-obs" id="o-rank" hidden>
-    <h2>今日排行榜</h2>
-    <div class="rank" id="rank"></div>
+    <div class="sat-h"><h2>今日排行榜</h2><span class="sat-t" id="rank-tabs"></span></div>
+    <ol class="rank" id="rank"></ol>
     <span class="cap" id="rank-cap"></span>
   </section>
   <section class="v-obs">
@@ -989,7 +994,7 @@ function fromData(T, D) {
 /* ---------- 地點 ---------- */
 const pname = p => p.c + p.t;
 const seedOf = s => [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7);
-let OB = null, satKind = "ir", here = null;
+let OB = null, satKind = "ir", rankKind = "hi", here = null;
 let places = [{ c: "臺北市", t: "中正區" }], active = 0, editing = false, liveOK = false;
 try {
   const saved = JSON.parse(store.get("places") || "null");
@@ -1256,13 +1261,19 @@ function drawObs() {
     } else { $("uv-now").textContent = ""; $("uv-lv").textContent = ""; $("uv-cap").textContent = twTime(O.time) + " 觀測"; }
     $("uv-grid").innerHTML = uv.slice().sort((a, b) => b[3] - a[3]).map(u => `<div><span><span class="uvk" style="background:${UVL(u[3])[1]}"></span>${u[0]}</span><b>${u[3]}</b></div>`).join("");
   }
-  // 排行榜
+  // 排行榜：用分頁一次看一種
   const hasRank = O && (O.hi && O.hi.length || O.lo && O.lo.length);
   show("o-rank", !!hasRank);
   if (hasRank) {
-    const col = (t, list, unit) => `<div><h3>${t}</h3><ol>` + (list && list.length ? list.map(r => `<li><span>${r[0]}</span><b>${r[3]}${unit}</b></li>`).join("") : `<li><span class="muted">今天還沒下雨</span></li>`) + "</ol></div>";
-    $("rank").innerHTML = col("最高溫", O.hi, "°") + col("最低溫", O.lo, "°") + col("雨量", O.rain, "");
-    $("rank-cap").textContent = "全臺測站，今天 0 點到 " + twTime(O.time) + "；雨量單位是毫米。";
+    const KINDS = { hi: ["最高溫", "°", "var(--bad)"], lo: ["最低溫", "°", "var(--rain)"], rain: ["雨量", " mm", "var(--rain)"] };
+    if (!KINDS[rankKind]) rankKind = "hi";
+    const [, unit, color] = KINDS[rankKind], list = O[rankKind] || [];
+    $("rank-tabs").innerHTML = Object.keys(KINDS).map(k => `<button type="button" class="${k === rankKind ? "on" : ""}" data-r="${k}">${KINDS[k][0]}</button>`).join("");
+    $("rank").style.setProperty("--c", color);
+    $("rank").innerHTML = list.length ? list.map((r, i) =>
+      `<li><span class="no">${i + 1}</span><span class="nm"><b>${r[0]}</b><span>${(r[1] || "") + (r[2] || "")}</span></span><span class="v">${r[3]}${unit}</span></li>`).join("")
+      : `<li><span></span><span class="muted">今天全臺都還沒下雨</span><span></span></li>`;
+    $("rank-cap").textContent = "全臺測站，今天 0 點到 " + twTime(O.time) + "。";
   }
 }
 /* 放大檢視：兩指縮放、單指拖曳、點兩下切換 */
@@ -1317,6 +1328,7 @@ function drawObs() {
     e.preventDefault(); const im = a.querySelector("img"); openZoom(a.href, im ? im.alt : "");
   }));
 })();
+$("rank-tabs").addEventListener("click", e => { const b = e.target.closest("[data-r]"); if (b) { rankKind = b.dataset.r; drawObs(); } });
 $("sat-tabs").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) { satKind = b.dataset.k; drawObs(); } });
 async function loadObs() {
   const get = f => fetch("data/" + f, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null);
