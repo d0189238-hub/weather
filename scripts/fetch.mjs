@@ -3,10 +3,14 @@
 import { mkdir, writeFile, readFile, unlink } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 const CWA = (process.env.CWA_KEY || "").trim();
 const MOENV = (process.env.MOENV_KEY || "").trim();
 const PUSH = (process.env.PUSH_SUB || "").trim();
+let PUSH_API = (process.env.PUSH_API || "").trim();
+try { PUSH_API = PUSH_API || JSON.parse(readFileSync(new URL("../push-config.json", import.meta.url), "utf8")).api || ""; } catch (e) {}
+const PUSH_TOKEN = (process.env.PUSH_TOKEN || "").trim();
 const OUT = process.env.OUT_DIR || "data";
 
 // 各縣市「鄉鎮預報」資料集編號：[未來 3 天, 未來 1 週]
@@ -20,7 +24,7 @@ const IDS = {
 };
 
 const status = { started: new Date().toISOString(), cwaKey: !!CWA, moenvKey: !!MOENV, errors: [], counties: {}, seen: {} };
-const scrub = s => { let t = String(s).split(CWA || "\u0000").join("***").split(MOENV || "\u0000").join("***"); try { const c = JSON.parse(PUSH); for (const v of [c.priv, c.sub && c.sub.endpoint, c.sub && c.sub.keys && c.sub.keys.auth]) if (v && String(v).length >= 8) t = t.split(v).join("***"); } catch (e) {} return t; };
+const scrub = s => { let t = String(s).split(CWA || "\u0000").join("***").split(MOENV || "\u0000").join("***"); if (PUSH_TOKEN.length >= 8) t = t.split(PUSH_TOKEN).join("***"); try { const c = JSON.parse(PUSH); for (const v of [c.priv, c.sub && c.sub.endpoint, c.sub && c.sub.keys && c.sub.keys.auth]) if (v && String(v).length >= 8) t = t.split(v).join("***"); } catch (e) {} return t; };
 const fail = (where, e) => { status.errors.push(where + ": " + scrub(e && e.message || e).slice(0, 300)); };
 
 // 不分大小寫取欄位，氣象署改過幾次欄位大小寫
@@ -37,11 +41,12 @@ const num = v => {
 };
 const arr = v => Array.isArray(v) ? v : v == null ? [] : [v];
 
-async function getJSON(url, tries = 3) {
+async function getJSON(url, opt = {}) {
   let last;
+  const tries = typeof opt === "number" ? opt : opt.tries || 3, o = typeof opt === "object" ? opt : {};
   for (let i = 0; i < tries; i++) {
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(60000), headers: { accept: "application/json" } });
+      const r = await fetch(url, { method: o.method || "GET", body: o.body, signal: AbortSignal.timeout(60000), headers: { accept: "application/json", ...(o.headers || {}) } });
       if (!r.ok) throw new Error("HTTP " + r.status + " " + (await r.text()).slice(0, 200));
       return await r.json();
     } catch (e) { last = e; await new Promise(r => setTimeout(r, 1500 * (i + 1))); }
@@ -380,32 +385,35 @@ async function main() {
   } catch (e) { fail("雷達動畫", e); }
   await writeFile(OUT + "/radar.json", JSON.stringify(radarFrames));
 
-  // ---------- 下雨通知 ----------
-  let pushCfg = null;
-  if (PUSH) { try { pushCfg = JSON.parse(PUSH); } catch (e) { fail("下雨通知", "PUSH_SUB 不是正確的訂閱碼，請重新複製"); } }
-  if (pushCfg && libs.push) {
+  // ---------- 下雨通知（登記處名單 + 舊版個人訂閱碼）----------
+  const subs = [];
+  if (PUSH_API && PUSH_TOKEN) {
+    try {
+      const L = await getJSON(PUSH_API.replace(/\/+$/, "") + "/list", { headers: { Authorization: "Bearer " + PUSH_TOKEN } });
+      for (const x of L.subs || []) subs.push({ id: x.id, sub: x.sub, places: x.places || [], pub: L.vapid.pub, priv: L.vapid.priv, remote: true });
+      status.seen.pushList = (L.subs || []).length;
+    } catch (e) { fail("下雨通知名單", e); }
+  }
+  if (PUSH) {
+    try { const c = JSON.parse(PUSH); subs.push({ id: "personal", sub: c.sub, places: c.places || [], pub: c.pub, priv: c.priv }); }
+    catch (e) { fail("下雨通知", "PUSH_SUB 不是正確的訂閱碼，請重新複製"); }
+  }
+  if (subs.length && !libs.push) fail("下雨通知", "缺少 web-push 套件");
+  if (subs.length && libs.push) {
     try {
       const hash = s => createHash("sha1").update(String(s)).digest("hex").slice(0, 12);
-      let state = { sent: {} };
+      let state = { sent: {}, hello: {} };
       if (site) { try { const r = await fetch(site + "data/push-state.json?t=" + Date.now(), { signal: AbortSignal.timeout(20000) }); if (r.ok) state = await r.json(); } catch (e) {} }
-      state.sent = state.sent || {};
+      state.sent = state.sent || {}; if (!state.hello || typeof state.hello !== "object") state.hello = {};
       const now = Date.now(), twH = new Date(now + 8 * 3600e3).getUTCHours(), quiet = twH >= 22 || twH < 7;
       for (const k in state.sent) if (now - state.sent[k] > 30 * 3600e3) delete state.sent[k];
-      const lines = [];
-      const once = (key, coolH, text) => {
-        const k = hash(key);
-        if (state.sent[k] && now - state.sent[k] < coolH * 3600e3) return;
-        state.sent[k] = now; lines.push(text);
-      };
-      // 雷達格點：最近 10 公里內的最大回波
+
+      // 雷達格點（每次只抓一份，大家共用）
       let grid = null;
       try {
         const j = await fileapi("O-A0059-001");
-        const nums = [], strs = [];
-        const walk = (o, path) => {
-          if (typeof o === "string" && o.length > 100000) strs.push(o);
-          else if (o && typeof o === "object") for (const k in o) walk(o[k], k);
-        };
+        const strs = [];
+        const walk = o => { if (typeof o === "string" && o.length > 100000) strs.push(o); else if (o && typeof o === "object") for (const k in o) walk(o[k]); };
         walk(j);
         const pick = re => { const v = findKey(j, re); return v == null ? null : Number(v); };
         const content = strs.sort((a, b) => b.length - a.length)[0];
@@ -423,42 +431,63 @@ async function main() {
         let m = -99;
         for (let y = Math.max(0, Math.floor((lat - dLat - lat0) / res)); y <= Math.min(Y - 1, Math.ceil((lat + dLat - lat0) / res)); y++)
           for (let x = Math.max(0, Math.floor((lon - dLon - lon0) / res)); x <= Math.min(X - 1, Math.ceil((lon + dLon - lon0) / res)); x++) {
-            const val = v[y * X + x];
-            if (val > m && val < 100) m = val;
+            const val = v[y * X + x]; if (val > m && val < 100) m = val;
           }
         return m;
       };
-      for (const p of pushCfg.places || []) {
-        const T = townData[p.c + "|" + p.t]; if (!T) continue;
-        const name = p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t;
-        if (!quiet) {
-          const e10 = echo(T.lat, T.lon, 10);
-          if (e10 !== null && e10 >= 30) once("rd|" + p.c + p.t, 3, `${name}附近 10 公里內有雨（雷達回波 ${Math.round(e10)} dBZ），衣服記得收`);
-          const rows = (T.f || []).map(r => ({ ms: Date.parse(r[0]), p: r[3] })).filter(r => r.p != null);
-          const cur = rows.filter(r => r.ms <= now).pop(), up = rows.find(r => r.ms > now && r.ms <= now + 3 * 3600e3 && r.p >= 70);
-          if (up && (!cur || cur.p < 50)) {
-            const hh = new Date(up.ms + 8 * 3600e3).getUTCHours();
-            once("fc|" + p.c + p.t + "|" + up.ms, 24, `${name} ${hh} 點起降雨機率 ${up.p}%，有曬衣服記得收`);
+      // 每個地點的提醒（同一地點只算一次）
+      const cache = {};
+      const alertsFor = p => {
+        const key = p.c + "|" + p.t;
+        if (cache[key]) return cache[key];
+        const T = townData[key], out = [];
+        if (T) {
+          const name = p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t;
+          if (!quiet) {
+            const e10 = echo(T.lat, T.lon, 10);
+            if (e10 !== null && e10 >= 30) out.push({ k: "rd|" + key, cool: 3, text: `${name}附近 10 公里內有雨，衣服記得收` });
+            const rows = (T.f || []).map(r => ({ ms: Date.parse(r[0]), p: r[3] })).filter(r => r.p != null);
+            const cur = rows.filter(r => r.ms <= now).pop(), up = rows.find(r => r.ms > now && r.ms <= now + 3 * 3600e3 && r.p >= 70);
+            if (up && (!cur || cur.p < 50)) out.push({ k: "fc|" + key + "|" + up.ms, cool: 24, text: `${name} ${new Date(up.ms + 8 * 3600e3).getUTCHours()} 點起降雨機率 ${up.p}%，有曬衣服記得收` });
           }
+          for (const z of warn[p.c] || []) out.push({ k: "wn|" + p.c + "|" + z.name + "|" + z.end, cool: 24, text: `${p.c}發布${z.name}` });
         }
-        for (const z of warn[p.c] || []) once("wn|" + p.c + "|" + z.name + "|" + z.end, 24, `${p.c}發布${z.name}`);
-      }
-      const ep = hash(pushCfg.sub && pushCfg.sub.endpoint);
-      if (!state.hello || state.hello !== ep) { state.hello = ep; lines.unshift("下雨通知開通了，之後快下雨會提醒你"); }
-      status.seen.push = { places: (pushCfg.places || []).length, lines: lines.length, quiet };
-      if (lines.length) {
-        libs.push.setVapidDetails(site || "https://github.com", pushCfg.pub, pushCfg.priv);
+        return (cache[key] = out);
+      };
+      const dead = [];
+      let sent = 0, failed = 0;
+      const one = async s => {
+        const sh = hash(s.id + "|" + (s.sub && s.sub.endpoint)), lines = [], keys = [];
+        const seenText = new Set();
+        for (const p of (s.places || []).slice(0, 8)) for (const a of alertsFor(p)) {
+          const k = hash(sh + "|" + a.k);
+          if (state.sent[k] && now - state.sent[k] < a.cool * 3600e3) continue;
+          if (!seenText.has(a.text)) { lines.push(a.text); seenText.add(a.text); }
+          keys.push(k);
+        }
+        const hello = state.hello[sh] !== 1;
+        if (hello) lines.unshift("下雨通知開通了，之後快下雨會提醒你");
+        if (!lines.length) return;
         try {
-          await libs.push.sendNotification(pushCfg.sub, JSON.stringify({ title: "曬衣服嗎", body: lines.join("\n"), tag: "rain", url: site || "./" }), { TTL: 1800, urgency: "high" });
-          status.seen.pushSent = lines.length;
+          await libs.push.sendNotification(s.sub, JSON.stringify({ title: "曬衣服嗎", body: lines.join("\n"), tag: "rain", url: site || "./" }),
+            { TTL: 1800, urgency: "high", vapidDetails: { subject: site || "https://github.com", publicKey: s.pub, privateKey: s.priv } });
+          keys.forEach(k => { state.sent[k] = now; });
+          state.hello[sh] = 1; sent++;
         } catch (e) {
-          fail("下雨通知", (e.statusCode === 404 || e.statusCode === 410) ? "手機上的訂閱已失效，請在網頁重新開通並更新 PUSH_SUB" : "傳送失敗 " + (e.statusCode || "") + " " + (e.body || e.message || ""));
-          if (lines[0] && lines[0].startsWith("下雨通知開通")) state.hello = null;
+          failed++;
+          if (e.statusCode === 404 || e.statusCode === 410) { if (s.remote) dead.push(s.id); else fail("下雨通知", "你的個人訂閱已失效，請在網頁重新開通"); delete state.hello[sh]; }
+          else if (failed <= 3) fail("下雨通知", "傳送失敗 " + (e.statusCode || "") + " " + String(e.body || e.message || "").slice(0, 120));
         }
+      };
+      for (let i = 0; i < subs.length; i += 10) await Promise.all(subs.slice(i, i + 10).map(one));
+      if (dead.length && PUSH_API) {
+        try { await getJSON(PUSH_API.replace(/\/+$/, "") + "/prune", { method: "POST", headers: { Authorization: "Bearer " + PUSH_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify({ ids: dead }) }); }
+        catch (e) { fail("清除失效訂閱", e); }
       }
+      status.seen.push = { subs: subs.length, sent, failed, removed: dead.length, quiet };
       await writeFile(OUT + "/push-state.json", JSON.stringify(state));
     } catch (e) { fail("下雨通知", e); }
-  } else if (pushCfg) fail("下雨通知", "缺少 web-push 套件");
+  }
 
   status.totalTowns = Object.values(status.counties).reduce((a, b) => a + b, 0);
   status.finished = new Date().toISOString();
