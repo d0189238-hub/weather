@@ -349,6 +349,8 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .sm-isl { display: flex; gap: 10px; font-size: 13px; color: var(--muted); align-self: flex-start; }
 .sm-isl i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--line); }
 #o-sm[hidden] { display: none; }
+.eqw { position: relative; }
+.eq-x { position: absolute; top: 4px; right: 4px; z-index: 2; width: 32px; height: 32px; border: 0; border-radius: 50%; background: none; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; }
 .pclose { margin-left: auto; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
 .hpanel { border: 1.5px solid var(--line); border-radius: 14px; padding: 14px 14px 16px !important; margin: 4px 0 8px; }
 .pr-say { margin: 0; font-size: 17px; font-weight: 600; }
@@ -2006,12 +2008,16 @@ function drawTyEq() {
   const latest = qs[0];
   if (latest) {
     const t = Date.parse(latest.time), hv = eqHere(latest, p, h), l = eqLvl(hv.v);
-    if (Date.now() - t < 24 * 3600e3 && l >= 1) {
+    const eqKey = latest.no + "|" + latest.time;
+    if (Date.now() - t < 24 * 3600e3 && l >= 1 && (l >= 4 || store.get("eqDismiss") !== eqKey)) {
       const [bg, fg] = EQC(l);
-      homeEq = `<div class="tap eq-card" role="button" tabindex="0" data-go="obs"><span class="eq-int" style="background:${bg};color:${fg}"><b>${eqTxt(hv.v).replace(" 級", "")}</b><small>級</small></span><div class="ty-txt"><span class="muted">地震・${twWhen(t).replace(/ (\d+) 點$/, "")} ${hm(latest.time)}</span><b>${shortLoc(latest.loc)}　規模 ${latest.mag}</b><span class="muted">你這裡震度 ${eqTxt(hv.v)}（${hv.how}），深 ${latest.depth} 公里</span></div></div>`;
+      // 你這裡 4 級以下可以自己關掉；4 級以上一直顯示
+      homeEq = (l < 4 ? `<button type="button" class="eq-x" data-eqkey="${eqKey}" aria-label="關閉地震資訊">×</button>` : "") + `<div class="tap eq-card" role="button" tabindex="0" data-go="obs"><span class="eq-int" style="background:${bg};color:${fg}"><b>${eqTxt(hv.v).replace(" 級", "")}</b><small>級</small></span><div class="ty-txt"><span class="muted">地震・${twWhen(t).replace(/ (\d+) 點$/, "")} ${hm(latest.time)}</span><b>${shortLoc(latest.loc)}　規模 ${latest.mag}</b><span class="muted">你這裡震度 ${eqTxt(hv.v)}（${hv.how}），深 ${latest.depth} 公里</span></div></div>`;
     }
   }
-  $("eq-home").innerHTML = homeEq; $("eq-home").hidden = !homeEq;
+  $("eq-home").innerHTML = homeEq ? `<div class="eqw">${homeEq}</div>` : ""; $("eq-home").hidden = !homeEq;
+  const x = $("eq-home").querySelector(".eq-x");
+  if (x) x.onclick = e => { e.stopPropagation(); store.set("eqDismiss", x.dataset.eqkey); $("eq-home").hidden = true; };
   $("o-eq").hidden = !qs.length;
   $("eq-bar").hidden = !(qs[0] && LMAP);
   if (qs[0] && LMAP) { $("eq-bar").innerHTML = `<span class="tag">最新地震</span><span class="tx">M${qs[0].mag}｜${shortLoc(qs[0].loc)}｜${twWhen(Date.parse(qs[0].time)).replace(/ (\d+) 點$/, "")} ${hm(qs[0].time)}</span><span class="chev">›</span>`; }
