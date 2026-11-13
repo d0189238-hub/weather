@@ -349,6 +349,24 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .sm-isl { display: flex; gap: 10px; font-size: 13px; color: var(--muted); align-self: flex-start; }
 .sm-isl i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--line); }
 #o-sm[hidden] { display: none; }
+.chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 4px 0 8px; }
+.chip { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px; border: 1.5px solid var(--line); border-radius: 12px; background: none; color: var(--ink); font: inherit; cursor: pointer; min-width: 0; }
+.chip .ck { font-size: 12px; color: var(--muted); }
+.chip b { font-family: var(--display); font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.chip.on { border-color: var(--ink); }
+.panel[hidden] { display: none; }
+.hero-say { margin: 6px 0 0; font-size: 17px; font-weight: 600; }
+.hero-say[hidden] { display: none; }
+details.rb { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+details.rb[hidden] { display: none; }
+details.rb summary { list-style: none; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; cursor: pointer; }
+details.rb summary::-webkit-details-marker { display: none; }
+details.rb .rb-lab { font-size: 15px; font-weight: 600; }
+.rb-more { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.rb-more::after { content: " ▾"; } details[open] .rb-more::after { content: " ▴"; }
+.next h3.sub { margin: 10px 0 0; font-size: 13px; font-weight: 400; color: var(--muted); }
+.next h3.sub:first-of-type { margin-top: 0; }
+
 .sat-span { margin: 8px 0 2px; }
 .sat-span button:disabled { opacity: .35; }
 .rb[hidden] { display: none; }
@@ -610,53 +628,18 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
         </div>
       </div>
       <div class="hero-desc"><span id="icon"></span><span id="desc"></span><span class="sep">・</span><span id="pop"></span></div>
+      <p class="hero-say" id="hero-say" hidden></p>
       <span class="chev">天氣詳細<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     </div>
   </section>
 
-  <section class="v-home laundry" id="laundry">
-    <div class="ld">
-      <span class="ld-ic" id="ld-ic"></span>
-      <div class="ld-t">
-        <span class="ld-k" id="ld-k"></span>
-        <b id="ld-main"></b>
-        <span id="ld-sub"></span>
-      </div>
-    </div>
-    <div class="ld-bar" id="ld-bar" aria-hidden="true"></div>
-    <div class="ld-ax" id="ld-ax" aria-hidden="true"></div>
-  </section>
-  <section class="v-home rb" id="rb" hidden>
-    <h2>降雨重點</h2>
-    <p class="rb-h" id="rb-h"></p>
-    <p class="rb-why" id="rb-why"></p>
-    <div class="rb-tl" id="rb-tl"></div>
-  </section>
-
-  <section class="v-home">
-    <h2>空氣品質</h2>
-    <div class="tap" role="button" tabindex="0" data-go="air">
-      <div class="air">
-        <div id="aqi-box"><span class="muted">AQI</span><b id="aqi">—</b><span id="aqi-lv"></span></div>
-        <div id="pm-box"><span class="muted">PM2.5</span><b id="pm">—</b><span id="pm-lv"></span></div>
-      </div>
-      <div class="flagline"><span class="flag" id="flag-home"></span><span class="chev">空氣詳細<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
-    </div>
-  </section>
-
-  <section class="v-home">
-    <h2>逐三小時預報</h2>
-    <p class="swing" id="swing"></p>
-    <div>
-      <div class="hscroll" id="f-scroll"><div class="strip" id="f-strip">
-        <div class="hrow" id="f-top"></div>
-        <div class="chart hchart" id="f-chart"></div>
-        <div class="hrow" id="f-bot"></div>
-      </div></div>
-    </div>
-  </section>
-
-  <section class="v-home">
+  <div class="v-home chips" id="chips">
+    <button type="button" class="chip" data-go="air"><span class="ck">空氣</span><b id="c-aqi">—</b></button>
+    <button type="button" class="chip" data-panel="p-wear"><span class="ck">穿著</span><b id="c-wear">—</b></button>
+    <button type="button" class="chip" data-panel="p-sun"><span class="ck">日落</span><b id="c-sun">—</b></button>
+    <button type="button" class="chip" data-go="obs" id="c-obs-b"><span class="ck">觀測</span><b id="c-obs">雷達</b></button>
+  </div>
+  <section class="v-home panel" id="p-wear" hidden>
     <div class="head">
       <h2>穿著與生活建議</h2>
       <div class="tabs" id="tabs" role="group" aria-label="時段"></div>
@@ -665,25 +648,24 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
     <p class="muted" id="wear-note"></p>
     <div class="tips" id="tips"></div>
   </section>
-
-  <section class="v-home">
-    <h2>一週預報</h2>
-    <div>
-      <div class="row7" id="w-top"></div>
-      <div class="chart wchart" id="w-chart"></div>
-    </div>
-    <div class="legend sm"><span style="--c:var(--bad)">每日最高溫</span><span style="--c:var(--rain)">每日最低溫</span></div>
-  </section>
-
-  <section class="v-home">
+  <section class="v-home panel" id="p-sun" hidden>
     <h2>日出日落</h2>
     <div>
       <div class="axis"><span>日出 <b id="rise"></b></span><span class="muted" id="daylen"></span><span>日落 <b id="set"></b></span></div>
       <div class="daybar"><i id="sunpos"></i></div>
     </div>
   </section>
-
-  <section class="v-home" id="obs-home" hidden>
+  <div hidden aria-hidden="true">
+  <section>
+    <div class="tap" role="button" tabindex="0" data-go="air">
+      <div class="air">
+        <div id="aqi-box"><span class="muted">AQI</span><b id="aqi">—</b><span id="aqi-lv"></span></div>
+        <div id="pm-box"><span class="muted">PM2.5</span><b id="pm">—</b><span id="pm-lv"></span></div>
+      </div>
+      <div class="flagline"><span class="flag" id="flag-home"></span><span class="chev">空氣詳細<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+    </div>
+  </section>
+  <section id="obs-home" hidden>
     <h2>觀測</h2>
     <div class="tap" role="button" tabindex="0" data-go="obs">
       <div class="thumb">
@@ -696,6 +678,48 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
       <span class="chev">觀測圖<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     </div>
   </section>
+  </div>
+  <section class="v-home laundry" id="laundry">
+    <div class="ld">
+      <span class="ld-ic" id="ld-ic"></span>
+      <div class="ld-t">
+        <span class="ld-k" id="ld-k"></span>
+        <b id="ld-main"></b>
+        <span id="ld-sub"></span>
+      </div>
+    </div>
+    <div class="ld-bar" id="ld-bar" aria-hidden="true"></div>
+    <div class="ld-ax" id="ld-ax" aria-hidden="true"></div>
+    <details class="rb" id="rb" hidden>
+      <summary><span class="rb-h" id="rb-h" hidden></span><span class="rb-lab">降雨時序</span><span class="rb-more">展開</span></summary>
+      <p class="rb-why" id="rb-why"></p>
+      <div class="rb-tl" id="rb-tl"></div>
+    </details>
+  </section>
+  <section class="v-home next">
+    <h2>接下來</h2>
+    <h3 class="sub">逐三小時</h3>
+    <p class="swing" id="swing"></p>
+    <div>
+      <div class="hscroll" id="f-scroll"><div class="strip" id="f-strip">
+        <div class="hrow" id="f-top"></div>
+        <div class="chart hchart" id="f-chart"></div>
+        <div class="hrow" id="f-bot"></div>
+      </div></div>
+    </div>
+    <h3 class="sub">一週</h3>
+    <div>
+      <div class="row7" id="w-top"></div>
+      <div class="chart wchart" id="w-chart"></div>
+    </div>
+    <div class="legend sm"><span style="--c:var(--bad)">每日最高溫</span><span style="--c:var(--rain)">每日最低溫</span></div>
+  </section>
+
+
+
+
+
+
 
   <!-- 天氣詳細 -->
   <section class="v-weather">
@@ -1063,7 +1087,7 @@ function dryPlan(hours, nowMin, sun) {
 }
 /* 降雨重點：接下來 2 天有一波雨時，依時段整理（上半天、下午～傍晚、晚上、深夜） */
 let BRIEFJ = null;
-fetch("data/brief.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).then(j => { BRIEFJ = j; if (typeof current !== "undefined" && current && !current.sample) renderRainBrief(current); }).catch(() => {});
+fetch("data/brief.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).then(j => { BRIEFJ = j; if (typeof current !== "undefined" && current && !current.sample) { renderRainBrief(current); renderChips(); } }).catch(() => {});
 function renderRainBrief(d) {
   const box = $("rb"); if (!box) return;
   const rows = (d && d.hours) || [], now = Date.now();
@@ -1193,7 +1217,7 @@ function render(d) {
     vy.className = df <= -1 ? "cold" : df >= 1 ? "warm" : "";
     vy.innerHTML = df <= -1 ? `・比昨天冷 <b>${-df}°</b>` : df >= 1 ? `・比昨天暖 <b>${df}°</b>` : "・跟昨天差不多";
   }
-  renderLaundry(d); renderRainBrief(d);
+  renderLaundry(d); renderRainBrief(d); setTimeout(renderChips, 0);
   setWx(c);
   $("precip").textContent = c.precip + " mm";
   $("hum").textContent = c.hum == null ? "—" : Math.round(c.hum) + "%";
@@ -1355,6 +1379,28 @@ function setOtab(t, scroll) {
 }
 $("otabs").addEventListener("click", e => { const b = e.target.closest("[data-t]"); if (b) setOtab(b.dataset.t, true); });
 setTimeout(() => setOtab(otab), 0);
+
+
+/* 首頁小標籤：空氣、穿著、日落、觀測；點穿著／日落展開，空氣／觀測直接進那一頁 */
+function renderChips() {
+  const t = id => ($(id) && $(id).textContent || "").trim();
+  $("c-aqi").textContent = t("aqi") && t("aqi") !== "—" ? t("aqi") + " " + t("aqi-lv") : "—";
+  const w = [...$("wear").querySelectorAll(".item span")].map(x => x.textContent);
+  $("c-wear").textContent = w.length ? w[0] : "—";
+  $("c-sun").textContent = t("set") || "—";
+  const lh = t("light-home");
+  $("c-obs").textContent = /閃電/.test(lh) && !/沒有/.test(lh) ? "有閃電" : "雷達";
+  const rb = $("rb"), say = $("hero-say");
+  say.hidden = rb.hidden; if (!rb.hidden) say.textContent = t("rb-h");
+}
+$("chips").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  if (b.dataset.go) { go(b.dataset.go); return; }
+  const p = $(b.dataset.panel), open = p.hidden;
+  ["p-wear", "p-sun"].forEach(id => { $(id).hidden = true; });
+  $("chips").querySelectorAll(".chip").forEach(c => c.classList.remove("on"));
+  p.hidden = !open; b.classList.toggle("on", open);
+});
 
 /* ---------- 資料 ---------- */
 function sample(lat, seed = 0) {
@@ -2173,7 +2219,7 @@ function drawObs() {
     $("radar-svg").innerHTML = svg;
     $("light-cap").textContent = lightText ? lightText + (n ? "・紅點落地、黃點雲中" : "") : "";
   }
-  $("light-home").textContent = lightText || "雷達回波與觀測圖";
+  $("light-home").textContent = lightText || "雷達回波與觀測圖"; renderChips();
   drawMapMarks();
   if (rgMode) $("radar-cap").textContent = "越紅越紫雨越大";
   show("obs-home", !!(M.radar || M.ir || M.vis || M.rain || M.temp || O));
