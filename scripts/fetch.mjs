@@ -611,7 +611,7 @@ async function main() {
           out[j * G.X + i] = Math.max(-1, Math.round(a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy));
         }
         dem = { ...G, d: Buffer.from(out.buffer).toString("base64") };
-        status.seen.demBuilt = { tiles: tiles.size, max: Math.max(...out) };
+        { let mx = 0; for (const v of out) if (v > mx) mx = v; status.seen.demBuilt = { tiles: tiles.size, max: mx }; }
       } else status.seen.demBuilt = { tiles: tiles.size, need: need.size };
     }
     if (dem) await writeFile(OUT + "/dem.json", JSON.stringify(dem));
