@@ -308,6 +308,12 @@ main { touch-action: pan-y; }
 .sat-t button { font: inherit; font-size: 16px; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 18px; background: none; color: var(--muted); cursor: pointer; }
 .sat-t button.on { border-color: var(--ink); color: var(--ink); }
 .v-obs[hidden], #obs-home[hidden] { display: none; }
+main[data-otab="rain"] .v-obs[data-tab]:not([data-tab~="rain"]), main[data-otab="temp"] .v-obs[data-tab]:not([data-tab~="temp"]), main[data-otab="sky"] .v-obs[data-tab]:not([data-tab~="sky"]) { display: none; }
+main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"] { display: none; }
+.otabs { position: sticky; top: 0; z-index: 20; display: flex; gap: 6px; padding: 10px 0; margin-bottom: 4px; background: var(--paper, #121726); }
+.otabs button { flex: 1; position: relative; border: 1.5px solid var(--line); background: none; color: var(--muted); border-radius: 999px; padding: 8px 0; font: inherit; font-size: 17px; }
+.otabs button.on { border-color: var(--ink); color: var(--ink); font-weight: 700; }
+.otabs i { position: absolute; top: 6px; right: 18%; width: 8px; height: 8px; border-radius: 50%; background: #e2484f; }
 .zoom { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 20; background: #000; overflow: hidden; touch-action: none; }
 .zoom[hidden] { display: none; }
 .zoom img { position: absolute; top: 50%; left: 50%; max-width: 100vw; max-height: 100vh; transform-origin: 0 0; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; }
@@ -619,7 +625,7 @@ main { touch-action: pan-y; }
     <div class="ld-bar" id="ld-bar" aria-hidden="true"></div>
     <div class="ld-ax" id="ld-ax" aria-hidden="true"></div>
   </section>
-  <section class="rb" id="rb" hidden>
+  <section class="v-home rb" id="rb" hidden>
     <h2>降雨重點</h2>
     <p class="rb-h" id="rb-h"></p>
     <p class="rb-why" id="rb-why"></p>
@@ -748,20 +754,9 @@ main { touch-action: pan-y; }
     </div>
   </section>
 
-  <!-- 觀測 -->
-  <section class="v-obs" id="o-ty" hidden>
-    <h2>颱風動態</h2>
-    <div id="ty-body"></div>
-  </section>
-  <section class="v-obs" id="o-sm" hidden>
-    <div class="sat-h"><h2 id="sm-title">未來 24 小時</h2><span class="sat-t" id="sm-kind"><button type="button" class="on" data-k="wx">天氣</button><button type="button" data-k="rain">雨量</button><button type="button" data-k="temp">溫度</button></span></div>
-    <div class="sm-grid" id="sm-grid"></div>
-    <div class="fc-legend" id="sm-legend"></div>
-    <div id="sm-head" hidden></div>
-    <p class="sm-me" id="sm-me" hidden></p>
-    <span class="cap" id="sm-cap">每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。</span>
-  </section>
-  <section class="v-obs" id="o-radar" hidden>
+  <!-- 觀測：分成 雨／溫度／天空 三個分頁 -->
+  <nav class="v-obs otabs" id="otabs"><button type="button" data-t="rain">雨</button><button type="button" data-t="temp">溫度</button><button type="button" data-t="sky">天空<i id="sky-dot" hidden></i></button></nav>
+  <section class="v-obs" id="o-radar" data-tab="rain" hidden>
     <div class="sat-h"><h2>即時地圖</h2><span class="sat-t" id="base-tabs" hidden><button type="button" class="on" data-b="photo">衛星</button><button type="button" data-b="map">簡潔</button></span></div>
     <div class="chips" id="layer-chips" hidden role="group" aria-label="地圖圖層">
       <button type="button" data-l="rain" aria-pressed="true">雨區</button><button type="button" data-l="light" aria-pressed="true">閃電</button><button type="button" data-l="eq" aria-pressed="true">地震</button><button type="button" data-l="fault" aria-pressed="false">斷層</button>
@@ -778,7 +773,43 @@ main { touch-action: pan-y; }
     <span class="cap" id="radar-cap"></span>
     <span class="cap" id="light-cap"></span>
   </section>
-  <section class="v-obs" id="o-sat" hidden>
+  <section class="v-obs" id="o-sm" data-tab="rain temp" hidden>
+    <div class="sat-h"><h2 id="sm-title">未來 24 小時</h2><span class="sat-t" id="sm-kind"><button type="button" class="on" data-k="wx">天氣</button><button type="button" data-k="rain">雨量</button><button type="button" data-k="temp">溫度</button></span></div>
+    <div class="sm-grid" id="sm-grid"></div>
+    <div class="fc-legend" id="sm-legend"></div>
+    <div id="sm-head" hidden></div>
+    <p class="sm-me" id="sm-me" hidden></p>
+    <span class="cap" id="sm-cap">每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。</span>
+  </section>
+  <section class="v-obs" id="o-rain" data-tab="rain" hidden>
+    <h2>今日累積雨量</h2>
+    <a class="map" id="rain-link" target="_blank" rel="noopener"><img id="rain-img" alt="今日累積雨量分布圖" loading="lazy"></a>
+    <span class="cap" id="rain-cap"></span>
+  </section>
+  <section class="v-obs" id="o-temp" data-tab="temp" hidden>
+    <h2>溫度分布</h2>
+    <div id="temp-map"></div>
+    <a class="map" id="temp-link" target="_blank" rel="noopener"><img id="temp-img" alt="全臺溫度分布圖" loading="lazy"><svg id="temp-svg" class="tlab" viewBox="0 0 880 880" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+    <div class="tleg" id="temp-legend" hidden><span>5°</span><i></i><span>35°</span></div>
+    <span class="cap" id="temp-isl"></span>
+    <span class="cap" id="temp-cap"></span>
+  </section>
+  <section class="v-obs" id="o-rank" data-tab="temp" hidden>
+    <div class="sat-h"><h2>今日排行榜</h2><span class="sat-t" id="rank-tabs"></span></div>
+    <ol class="rank" id="rank"></ol>
+    <span class="cap" id="rank-cap"></span>
+  </section>
+  <section class="v-obs" id="o-uv" data-tab="temp" hidden>
+    <h2>紫外線測報</h2>
+    <div class="uvbig"><b id="uv-now"></b><span id="uv-lv"></span></div>
+    <span class="cap" id="uv-cap"></span>
+    <div class="uvgrid" id="uv-grid"></div>
+  </section>
+  <section class="v-obs" id="o-ty" data-tab="sky" hidden>
+    <h2>颱風動態</h2>
+    <div id="ty-body"></div>
+  </section>
+  <section class="v-obs" id="o-sat" data-tab="sky" hidden>
     <div class="sat-h"><h2>衛星雲圖</h2><span class="sat-t" id="sat-tabs"></span></div>
     <a class="map" id="sat-link" target="_blank" rel="noopener"><img id="sat-img" alt="臺灣附近的衛星雲圖"></a>
     <div class="player" id="s-player" hidden>
@@ -789,34 +820,10 @@ main { touch-action: pan-y; }
     <div class="sat-t sat-span" id="sat-span"><button type="button" data-h="1">1 小時</button><button type="button" data-h="3" class="on">3 小時</button><button type="button" data-h="6">6 小時</button></div>
     <span class="cap" id="sat-time"></span>
   </section>
-  <section class="v-obs" id="o-rain" hidden>
-    <h2>今日累積雨量</h2>
-    <a class="map" id="rain-link" target="_blank" rel="noopener"><img id="rain-img" alt="今日累積雨量分布圖" loading="lazy"></a>
-    <span class="cap" id="rain-cap"></span>
-  </section>
-  <section class="v-obs" id="o-temp" hidden>
-    <h2>溫度分布</h2>
-    <div id="temp-map"></div>
-    <a class="map" id="temp-link" target="_blank" rel="noopener"><img id="temp-img" alt="全臺溫度分布圖" loading="lazy"><svg id="temp-svg" class="tlab" viewBox="0 0 880 880" preserveAspectRatio="none" aria-hidden="true"></svg></a>
-    <div class="tleg" id="temp-legend" hidden><span>5°</span><i></i><span>35°</span></div>
-    <span class="cap" id="temp-isl"></span>
-    <span class="cap" id="temp-cap"></span>
-  </section>
-  <section class="v-obs" id="o-eq" hidden>
+  <section class="v-obs" id="o-eq" data-tab="sky" hidden>
     <h2>最近地震</h2>
     <ul class="eq-list" id="eq-list"></ul>
     <span class="cap">點任一筆會在上面的地圖標出震央，星號越大規模越大；紅色是最新一筆，橘色是 24 小時內。點星號可以看詳細資料和地震報告圖。震度用你選的地點附近 20 公里內的測站，沒有的話用縣市最大震度。</span>
-  </section>
-  <section class="v-obs" id="o-uv" hidden>
-    <h2>紫外線測報</h2>
-    <div class="uvbig"><b id="uv-now"></b><span id="uv-lv"></span></div>
-    <span class="cap" id="uv-cap"></span>
-    <div class="uvgrid" id="uv-grid"></div>
-  </section>
-  <section class="v-obs" id="o-rank" hidden>
-    <div class="sat-h"><h2>今日排行榜</h2><span class="sat-t" id="rank-tabs"></span></div>
-    <ol class="rank" id="rank"></ol>
-    <span class="cap" id="rank-cap"></span>
   </section>
   <section class="v-obs">
     <p class="cap">點圖可以全螢幕放大，兩指張開再放大、單指拖曳移動。資料來源：中央氣象署。</p>
@@ -1324,6 +1331,29 @@ function renderMore(d) {
   // 電腦：滑鼠移過去就顯示
   el.addEventListener("mousemove", show); el.addEventListener("mouseleave", hide);
 })();
+
+
+/* 觀測頁分頁：雨／溫度／天空。「未來」地圖在雨跟溫度兩頁共用，切換時搬過去 */
+let otab = store.get("otab") || "rain";
+function setOtab(t, scroll) {
+  otab = t; store.set("otab", t);
+  $("app").dataset.otab = t;
+  $("otabs").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  const sm = $("o-sm");
+  if (t === "rain") { $("o-radar").after(sm); if (smKind === "temp") smKind = "rain"; }
+  if (t === "temp") { $("o-temp").after(sm); smKind = "temp"; }
+  $("sm-kind").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.k === smKind));
+  if (scroll) $("otabs").scrollIntoView({ block: "start" });
+  // 剛顯示出來的圖重新排版
+  requestAnimationFrame(() => {
+    if (t === "rain" && LMAP) LMAP.invalidateSize();
+    if (t !== "sky" && SM) drawSmall();
+    if (t === "temp" && OB && OB.obs) drawTempNow(OB.obs).catch(() => {});
+    if (t === "sky") { TYMAPS.forEach(m => m.invalidateSize()); drawTyMaps(); }
+  });
+}
+$("otabs").addEventListener("click", e => { const b = e.target.closest("[data-t]"); if (b) setOtab(b.dataset.t, true); });
+setTimeout(() => setOtab(otab), 0);
 
 /* ---------- 資料 ---------- */
 function sample(lat, seed = 0) {
@@ -1891,6 +1921,7 @@ function drawTyEq() {
   $("ty-home").innerHTML = homeTy; $("ty-home").hidden = !homeTy;
   TYMAPS.forEach(m => m.remove()); TYMAPS = [];
   $("o-ty").hidden = !obsTy; $("ty-body").innerHTML = obsTy;
+  $("sky-dot").hidden = !obsTy;
   if (obsTy && $("app").dataset.view === "obs") drawTyMaps();
   // 地震
   const qs = EQ && EQ.list || [];
