@@ -2478,7 +2478,7 @@ function tmapLabels(wrap, M, labels) {
     const [x, y] = M.P([L.lon, L.lat]), el = document.createElement("div");
     el.innerHTML = `<small>${L.name}</small><b>${L.v}°</b>`;
     wrap.appendChild(el);
-    return { el, x, y, ly: y, lon: L.lon, me: L.me, right: L.lon > 121.05 };
+    return { el, x, y, ly: y, lon: L.lon, me: L.me, name: L.name, right: L.lon > 121.05 };
   });
   if (!items.length) return;
   // 左右兩側數量平衡：西邊太多時，把最靠內陸的移到東邊
@@ -2488,7 +2488,9 @@ function tmapLabels(wrap, M, labels) {
   // 每側由上往下排，保證不重疊，也不超出地圖上下
   const h = Math.max(...items.map(i => i.el.offsetHeight || 0), 24) + 4;
   for (const side of [false, true]) {
-    const g = items.filter(i => i.right === side).sort((a, b) => a.y - b.y);
+    // 由上往下照緯度排；高雄、屏東照一般人習慣，高雄在上
+    const ORD = { 高雄: 0, 屏東: 1 };
+    const g = items.filter(i => i.right === side).sort((a, b) => (a.name in ORD && b.name in ORD) ? ORD[a.name] - ORD[b.name] : a.y - b.y);
     g.forEach((it, k) => { it.ly = Math.max(it.y, k ? g[k - 1].ly + h : h / 2); });
     for (let k = g.length - 1; k >= 0; k--) { const lim = k === g.length - 1 ? M.H - h / 2 : g[k + 1].ly - h; if (g[k].ly > lim) g[k].ly = lim; }
     // 往上推之後如果頂到上緣，再往下排一次
