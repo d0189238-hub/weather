@@ -492,7 +492,7 @@ async function main() {
   }
   await writeFile(OUT + "/qpf.json", JSON.stringify(qpfOut));
 
-  // ---------- 衛星雲圖動畫（氣象署官網高解析圖，最近 2 小時，每 10 分鐘一張）----------
+  // ---------- 衛星雲圖動畫（氣象署官網高解析圖，最近 6 小時）----------
   const satOut = {};
   try {
     let prev = {};
@@ -502,7 +502,9 @@ async function main() {
     const slotStr = ms => { const d = new Date(ms + 8 * 3600e3); return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}-${p2(d.getUTCHours())}-${p2(d.getUTCMinutes())}`; };
     const slotIso = ms => { const d = new Date(ms + 8 * 3600e3); return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}T${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}:00+08:00`; };
     const base = Math.floor(Date.now() / 600e3) * 600e3;
-    const slots = []; for (let k = 15; k >= 1; k--) slots.push(base - k * 600e3);
+    // 保留 6 小時：最近 1 小時每 10 分、1–3 小時每 20 分、3–6 小時每 30 分
+    const slots = [];
+    for (let k = 37; k >= 1; k--) { const ms = base - k * 600e3, m = new Date(ms).getUTCMinutes(), age = k * 10; if (age <= 70 || (age <= 190 && m % 20 === 0) || m % 30 === 0) slots.push(ms); }
     const shrink = buf => {
       if (!libs.jpeg) return buf;
       const src = libs.jpeg.decode(buf, { useTArray: true, maxMemoryUsageInMB: 1024 });
@@ -526,14 +528,14 @@ async function main() {
             const r = await fetch(site + "data/" + have[iso].file, { signal: AbortSignal.timeout(20000) });
             if (r.ok) { await writeFile(OUT + "/" + file, Buffer.from(await r.arrayBuffer())); frames.push({ file, time: iso }); continue; }
           }
-          if (made >= 15) continue;
+          if (made >= 24) continue;
           const r = await fetch(cwa(small, slotStr(ms)), { signal: AbortSignal.timeout(30000) });
           if (!r.ok) continue;
           await writeFile(OUT + "/" + file, shrink(Buffer.from(await r.arrayBuffer())));
           frames.push({ file, time: iso }); made++;
         } catch (e) {}
       }
-      const keep = frames.slice(-12);
+      const keep = frames;
       let fullFile = null;
       const last = keep[keep.length - 1];
       if (last) {

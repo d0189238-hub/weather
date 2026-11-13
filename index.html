@@ -343,6 +343,8 @@ main { touch-action: pan-y; }
 .sm-isl { display: flex; gap: 10px; font-size: 13px; color: var(--muted); align-self: flex-start; }
 .sm-isl i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--line); }
 #o-sm[hidden] { display: none; }
+.sat-span { margin: 8px 0 2px; }
+.sat-span button:disabled { opacity: .35; }
 .rb[hidden] { display: none; }
 .rb-h { margin: 6px 0 2px; font-family: "Noto Sans TC", sans-serif; font-weight: 900; font-size: 21px; line-height: 1.35; }
 .rb-why { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
@@ -784,6 +786,7 @@ main { touch-action: pan-y; }
       <input type="range" id="s-slider" min="0" max="0" step="1" value="0" aria-label="選擇雲圖時間">
       <span class="ptime" id="s-time"></span>
     </div>
+    <div class="sat-t sat-span" id="sat-span"><button type="button" data-h="1">1 小時</button><button type="button" data-h="3" class="on">3 小時</button><button type="button" data-h="6">6 小時</button></div>
     <span class="cap" id="sat-time"></span>
   </section>
   <section class="v-obs" id="o-rain" hidden>
@@ -2723,7 +2726,7 @@ $("base-tabs").addEventListener("click", e => {
 $("rmap-me").addEventListener("click", e => { e.stopPropagation(); if (LMAP && here) LMAP.setView([here.lat, here.lon], 11); });
 
 /* 衛星雲圖動畫：最近 2 小時，每 10 分鐘一張；放大時看 2750 像素原圖 */
-let SF = [], sTimer = null, sIdx = 0, sLayer = null;
+let SF = [], sTimer = null, sIdx = 0, sLayer = null, satSpan = Number(store.get("satSpan")) || 3;
 const isDayNow = () => { const h = new Date(Date.now() + 8 * 3600e3).getUTCHours(); return h >= 7 && h < 17; };
 function showSat(i) {
   sIdx = i; $("s-slider").value = i;
@@ -2733,7 +2736,13 @@ function showSat(i) {
 function stopSat() { clearInterval(sTimer); sTimer = null; $("s-play").textContent = "▶ 播放"; }
 function setSat(layer) {
   if (layer === sLayer && SF.length) return;
-  stopSat(); sLayer = layer; SF = layer.frames.slice();
+  stopSat(); sLayer = layer;
+  // 依選的時間長度挑格子：1 小時每 10 分、3 小時每 20 分、6 小時每 30 分，最新一張一定放
+  const all = layer.frames.slice(), lastMs = Date.parse(all[all.length - 1].time), step = satSpan === 1 ? 10 : satSpan === 3 ? 20 : 30;
+  SF = all.filter((f, i) => { const ms = Date.parse(f.time), age = (lastMs - ms) / 60e3; return age <= satSpan * 60 && (i === all.length - 1 || Math.round(age) % step === 0); });
+  if (SF.length < 2) SF = all.slice(-7);
+  const have = (lastMs - Date.parse(all[0].time)) / 3600e3;
+  $("sat-span").querySelectorAll("button").forEach(b => { b.classList.toggle("on", +b.dataset.h === satSpan); b.disabled = +b.dataset.h > 1 && have < +b.dataset.h - 0.6; });
   SF.forEach(f => { const im = new Image(); im.src = "data/" + f.file; });
   $("s-player").hidden = SF.length < 2;
   $("s-slider").max = SF.length - 1;
@@ -2745,9 +2754,10 @@ function setSat(layer) {
 $("s-play").addEventListener("click", () => {
   if (sTimer) { stopSat(); return; }
   $("s-play").textContent = "⏸ 暫停";
-  sTimer = setInterval(() => showSat(sIdx >= SF.length - 1 ? 0 : sIdx + 1), 500);
+  sTimer = setInterval(() => showSat(sIdx >= SF.length - 1 ? 0 : sIdx + 1), SF.length > 10 ? 380 : 500);
 });
 $("s-slider").addEventListener("input", e => { stopSat(); showSat(Number(e.target.value)); });
+$("sat-span").addEventListener("click", e => { const b = e.target.closest("[data-h]"); if (!b || b.disabled || !sLayer) return; satSpan = +b.dataset.h; store.set("satSpan", String(satSpan)); const l = sLayer; sLayer = null; setSat(l); });
 
 /* 放大檢視：兩指縮放、單指拖曳、點兩下切換 */
 (() => {
