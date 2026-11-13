@@ -958,8 +958,33 @@ async function main() {
         if (F.hot && notes.length < max) notes.push({ d: F.hot, t: `${dayName(F.hot, ahead(F.hot))}高溫 ${F.hiOf(F.hot)[1]}°` });
         return notes.sort((a, b) => a.d < b.d ? -1 : 1).slice(0, max).map(n => n.t);
       };
+      // 一波雨：兩天內有明顯降雨時，改推「降雨重點」時序（依第一個地點的逐 3 小時預報）
+      const rainEvent = s => {
+        const p0 = (s.places || [])[0]; const T = p0 && townData[p0.c + "|" + p0.t]; if (!T || !T.f) return null;
+        const SEG = [[0, 6, "深夜"], [6, 12, "上半天"], [12, 18, "下午到傍晚"], [18, 24, "晚上"]], segs = [];
+        for (const r of T.f) {
+          const ms = Date.parse(r[0]); if (ms < now - 3600e3 || ms > now + 48 * 3600e3) continue;
+          const tw = new Date(ms + 8 * 3600e3), h = tw.getUTCHours(), day = tw.toISOString().slice(0, 10), si = SEG.findIndex(z => h >= z[0] && h < z[1]), key = day + si;
+          let g = segs.find(x => x.key === key); if (!g) { g = { key, day, si, pop: 0, th: false }; segs.push(g); }
+          g.pop = Math.max(g.pop, r[3] ?? 0); if (/雷/.test(r[5] || "")) g.th = true;
+        }
+        const first = segs.findIndex(g => g.pop >= 60); if (first < 0) return null;
+        let last = first; while (last + 1 < segs.length && segs[last + 1].pop >= 50) last++;
+        const peak = segs.slice(first, last + 1).reduce((a, b) => b.pop > a.pop ? b : a), th = segs.slice(first, last + 1).some(g => g.th);
+        const dn = d => { const a = ahead(d); return (a === 0 ? "今天" : a === 1 ? "明天" : dayName(d, a)) + `(${+d.slice(8)}日)`; };
+        const lines = [`${dn(segs[first].day)}${SEG[segs[first].si][2]}起${th ? "有雷雨" : "有雨"}`];
+        let lastDay = null;
+        segs.slice(Math.max(0, first - 1), Math.min(segs.length, last + 2)).forEach((g, n, arr) => {
+          const i = segs.indexOf(g), lab = (g.day !== lastDay && lastDay ? dn(g.day).replace(/\(.*/, "") : "") + SEG[g.si][2]; lastDay = g.day;
+          const t = i < first ? "天氣尚可" : i > last ? "雨勢減緩" : g === peak ? `雨勢最明顯 ${g.pop}%` + (g.th ? "，可能打雷" : "") : `有雨 ${g.pop}%`;
+          lines.push(`▎${lab}：${t}`);
+        });
+        return lines;
+      };
       const digestFor = (s, mode) => {
         const F = factsOf(s); if (!F) return null;
+        const ev = rainEvent(s);
+        if (ev) return { title: "降雨重點", body: [BRIEF.title || whyOf[mode === "am" ? "今天" : "明天"], ...ev].filter(Boolean).join("\n") };
         if (mode === "am") {
           // 今天：溫度＋什麼時候可能下雨（逐時預報）
           const temps = F.pl.map(x => { const r = x.T.w.find(r => r[0] === todayStr); return r && r[1] != null ? `${x.name} ${Math.round(r[2])}–${Math.round(r[1])}°` : null; }).filter(Boolean);

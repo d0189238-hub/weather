@@ -358,7 +358,7 @@ main { touch-action: pan-y; }
 .tmf figcaption .d { border: 1.5px solid var(--ink); border-radius: 999px; padding: 2px 9px; font-size: 14px; font-weight: 700; }
 .tmf figcaption .d small { font-size: 10px; font-weight: 500; }
 .tmf figcaption .h { background: var(--ink); color: var(--paper); border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; }
-.tmw { padding: 14px 23% 0 15%; }
+.tmw { padding: 14px 27% 0 17%; }
 #temp-map .tmw { padding: 16px 16% 0; }
 .tmi { position: relative; }
 .tmi canvas { width: 100%; display: block; }
@@ -368,7 +368,12 @@ main { touch-action: pan-y; }
 .tml span { background: rgba(120,124,132,.85); color: #fff; border-radius: 999px; padding: 2px 4px; font-weight: 700; }
 .tml.me b { background: #fff; color: #1b1f27; }
 .tml em { font-style: normal; font-weight: 700; font-size: 9.5px; padding: 2px 3px; border-radius: 999px; color: #fff; }
-.tml em.up { background: #d9535f; } .tml em.dn { background: #3f84d6; }
+.tml, .tml.r { margin-left: 0; }
+.tml span i { font-style: normal; margin-left: 3px; padding: 0 3px; border-radius: 999px; }
+.tml span i.up { background: #d9535f; } .tml span i.dn { background: #3f84d6; }
+.tmlines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.tmlines line { stroke: rgba(255,255,255,.75); stroke-width: .7; }
+.tmlines circle { fill: #fff; stroke: #1b1f27; stroke-width: .6; }
 #temp-map .tml { font-size: 13px; }
 .tmh { margin: 4px 0 0; font-family: "Noto Sans TC", sans-serif; font-weight: 900; font-size: 24px; line-height: 1.3; }
 .tmh u { text-decoration: none; background: linear-gradient(transparent 62%, rgba(226,72,86,.85) 62%); padding: 0 2px; }
@@ -2452,25 +2457,44 @@ function tmapDraw(cv, pts, opts = {}) {
   c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(off, 0, 0); c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.restore();
   c.lineJoin = "round";
-  c.strokeStyle = "rgba(40,30,30,.16)"; c.lineWidth = 0.35; for (const t of SM.towns) { c.beginPath(); outline(t.geom); c.stroke(); }
+  c.strokeStyle = "rgba(40,30,30,.07)"; c.lineWidth = 0.3; for (const t of SM.towns) { c.beginPath(); outline(t.geom); c.stroke(); }
   c.strokeStyle = "rgba(30,25,25,.55)"; c.lineWidth = 0.8; for (const g of SM.counties) { c.beginPath(); outline(g); c.stroke(); }
-  return { tAt, P, W, H };
+  const A = c.getImageData(0, 0, PW, PH).data;
+  // 從某一點往左（-1）或往右（1）找到海岸線
+  const edge = (x, y, dir) => { let px = Math.min(PW - 1, Math.max(0, Math.round(x * dpr))); const py = Math.min(PH - 1, Math.max(0, Math.round(y * dpr))); while (px >= 0 && px < PW && A[(py * PW + px) * 4 + 3] > 40) px += dir; return px / dpr; };
+  return { tAt, P, W, H, edge };
 }
 // 城市標籤（白框名稱＋灰底溫度，可加升降溫）
 function tmapLabels(wrap, M, labels) {
-  wrap.querySelectorAll(".tml").forEach(x => x.remove());
-  for (const L of labels) {
-    const [x, y] = M.P([L.lon, L.lat]), el = document.createElement("div");
-    el.className = "tml" + (L.me ? " me" : "") + (x > M.W * 0.6 ? " r" : "");
-    el.style.left = (x / M.W * 100) + "%"; el.style.top = (y / M.H * 100) + "%";
-    el.innerHTML = `<b>${L.name}</b><span>${L.v}°</span>` + (L.delta != null && Math.round(L.delta) !== 0 ? `<em class="${L.delta > 0 ? "up" : "dn"}">${L.delta > 0 ? "+" : "−"}${Math.abs(Math.round(L.delta))}</em>` : "");
+  wrap.querySelectorAll(".tml, .tmlines").forEach(x => x.remove());
+  const items = labels.map(L => {
+    const [x, y] = M.P([L.lon, L.lat]), right = L.lon > 121.05, el = document.createElement("div");
+    el.className = "tml" + (L.me ? " me" : "") + (right ? " r" : "");
+    el.innerHTML = `<b>${L.name}</b><span>${L.v}°${L.delta != null && Math.round(L.delta) !== 0 ? `<i class="${L.delta > 0 ? "up" : "dn"}">${L.delta > 0 ? "+" : "−"}${Math.abs(Math.round(L.delta))}</i>` : ""}</span>`;
     wrap.appendChild(el);
+    return { el, x, y, ly: y, right };
+  });
+  if (!items.length) return;
+  // 同一側的標籤上下錯開，不互相蓋住；再用細線連回實際位置
+  const h = items[0].el.offsetHeight + 3;
+  for (const side of [false, true]) {
+    const g = items.filter(i => i.right === side).sort((a, b) => a.y - b.y);
+    for (let k = 0; k < 40; k++) { let moved = false; for (let i = 1; i < g.length; i++) { const ov = g[i - 1].ly + h - g[i].ly; if (ov > 0.1) { g[i - 1].ly -= ov / 2; g[i].ly += ov / 2; moved = true; } } if (!moved) break; }
   }
+  let svg = `<svg class="tmlines" viewBox="0 0 ${M.W} ${M.H}" preserveAspectRatio="none">`;
+  for (const i of items) {
+    const e1 = M.edge(i.x, i.y, i.right ? 1 : -1), e2 = M.edge(i.x, i.ly, i.right ? 1 : -1), e = i.right ? Math.max(e1, e2) : Math.min(e1, e2), lx = e + (i.right ? 5 : -5);
+    i.el.style.left = (lx / M.W * 100) + "%"; i.el.style.top = (i.ly / M.H * 100) + "%";
+    svg += `<line x1="${lx}" y1="${i.ly}" x2="${i.x}" y2="${i.y}"/><circle cx="${i.x}" cy="${i.y}" r="1.7"/>`;
+  }
+  wrap.insertAdjacentHTML("beforeend", svg + "</svg>");
 }
-const TMAP_CITIES = [["臺北", "臺北市", "中正區"], ["臺中", "臺中市", "西屯區"], ["臺南", "臺南市", "中西區"], ["高雄", "高雄市", "苓雅區"], ["花蓮", "花蓮縣", "花蓮市"]];
+// 參考城市：離你選的地點太近的就不標，避免擠在一起
+const tmapFar = (lat, lon, mine) => !mine.some(m => Math.hypot(m.lat - lat, (m.lon - lon) * 0.92) < 0.3);
+const TMAP_CITIES = [["臺北", "臺北市", "中正區"], ["臺中", "臺中市", "西屯區"], ["高雄", "高雄市", "苓雅區"], ["花蓮", "花蓮縣", "花蓮市"]];
 function tmapLegend() {
   const stops = TPAL.map(([v, c]) => `rgb(${c.map(Math.round)}) ${(v + 10) / 55 * 100}%`).join(",");
-  return `<div class="tmleg"><i style="background:linear-gradient(90deg,${stops})"></i><div>${[-10, 0, 10, 20, 25, 30, 37, 45].map(v => `<span style="left:${(v + 10) / 55 * 100}%">${v === -10 ? "≤-10" : v === 45 ? "≥45" : v}</span>`).join("")}</div></div>`;
+  return `<div class="tmleg"><i style="background:linear-gradient(90deg,${stops})"></i><div>${[0, 10, 20, 30, 40].map(v => `<span style="left:${(v + 10) / 55 * 100}%">${v}°</span>`).join("")}</div></div>`;
 }
 // 未來溫度：兩個中午並排
 async function drawTempCompare(box) {
@@ -2491,7 +2515,8 @@ async function drawTempCompare(box) {
   box.querySelectorAll(".tmf").forEach((f, n) => {
     const [i] = two[n], M = tmapDraw(f.querySelector("canvas"), ptsOf(i));
     if (!M) return;
-    const labs = cities.concat(mine).map(x => { const co = TCO[x.c] && TCO[x.c][x.t], v = valAt(i, x.c, x.t); return co && v != null ? { ...x, lat: co[0], lon: co[1], v } : null; }).filter(Boolean);
+    const mk = x => { const co = TCO[x.c] && TCO[x.c][x.t], v = valAt(i, x.c, x.t); return co && v != null ? { ...x, lat: co[0], lon: co[1], v } : null; };
+    const mineL = mine.map(mk).filter(Boolean), labs = cities.map(mk).filter(Boolean).filter(L => tmapFar(L.lat, L.lon, mineL)).concat(mineL);
     if (n === 1 && vals[0]) labs.forEach(L => { const a = vals[0].find(z => z.c === L.c && z.t === L.t); if (a) L.delta = L.v - a.v; });
     vals.push(labs);
     tmapLabels(f.querySelector(".tmi"), M, labs);
@@ -2519,9 +2544,10 @@ async function drawTempNow(O) {
   if (!M) return false;
   const near = (lat, lon) => { let best = null, bd = 1e9; for (const r of O.tall) { const d = (r[0] - lat) ** 2 + ((r[1] - lon) * 0.92) ** 2; if (d < bd) { bd = d; best = r; } } return bd < 0.0081 ? best : null; };
   const named = n => (O.temps || []).find(t => t[0] === n);
-  const labs = [];
-  TMAP_CITIES.forEach(([n]) => { const t = named(n); if (t) labs.push({ name: n, lat: t[2], lon: t[3], v: Math.round(t[1]) }); });
+  const labs = [], mineL = [];
   places.slice(0, 4).forEach(p => { const co = TCO[p.c] && TCO[p.c][p.t]; if (!co) return; const r = near(co[0], co[1]); if (r) labs.push({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, lat: co[0], lon: co[1], v: Math.round(r[2]), me: true }); });
+  TMAP_CITIES.forEach(([n]) => { const t = named(n); if (t && tmapFar(t[2], t[3], labs)) mineL.push({ name: n, lat: t[2], lon: t[3], v: Math.round(t[1]) }); });
+  labs.push(...mineL);
   tmapLabels(box.querySelector(".tmi"), M, labs);
   box.insertAdjacentHTML("beforeend", tmapLegend());
   return true;
