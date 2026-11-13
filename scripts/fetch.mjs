@@ -341,6 +341,18 @@ async function main() {
   if (!light.ok) light.pts = null;
   await writeFile(OUT + "/lightning.json", JSON.stringify(light));
 
+  // 雨量站（今日累積），讓累積雨量圖更密
+  let rainSt = [];
+  if (CWA) {
+    try {
+      const j = await getJSON(cwaUrl("O-A0002-001"));
+      rainSt = arr(ci(ci(j, "records"), "Station")).map(s => {
+        const geo = ci(s, "GeoInfo"), cs = arr(ci(geo, "Coordinates")), co = cs.find(c => /WGS84/i.test(ci(c, "CoordinateName") || "")) || cs[0];
+        return { station: ci(s, "StationName"), county: ci(geo, "CountyName"), town: ci(geo, "TownName"), lat: num(ci(co, "StationLatitude")), lon: num(ci(co, "StationLongitude")), rain: num(ci(ci(ci(s, "RainfallElement"), "Now"), "Precipitation")) };
+      }).filter(x => x.lat != null && x.rain != null && x.rain >= 0 && x.rain < 3000);
+      status.seen["O-A0002-001"] = rainSt.length;
+    } catch (e) { fail("雨量站", e); }
+  }
   // 紫外線（綜觀站）與今日排行
   if (obs.length) {
     const uniq = new Map(); obs.forEach(x => { if (!uniq.has(x.station)) uniq.set(x.station, x); });
@@ -351,7 +363,8 @@ async function main() {
       uv: all.filter(x => x.syn && x.uv !== null && x.uv >= 0).map(x => pick(x).concat(x.uv, x.lat, x.lon)),
       temps: all.filter(x => (x.syn || ["斗六", "埔里", "梧棲"].includes(x.station)) && x.temp !== null && x.temp > -30 && x.lat != null).map(x => [x.station, x.temp, x.lat, x.lon, x.county || ""]),
       tall: all.filter(x => x.temp !== null && x.temp > -30 && x.temp < 50 && x.lat != null && x.lon != null).map(x => [Math.round(x.lat * 1000) / 1000, Math.round(x.lon * 1000) / 1000, x.temp, x.alt == null ? null : Math.round(x.alt)]),
-      hi: top("hi", 1), lo: top("lo", -1), rain: top("rain", 1).filter(x => x[3] > 0)
+      hi: top("hi", 1), lo: top("lo", -1), rain: top("rain", 1).filter(x => x[3] > 0),
+      rall: (() => { const m = new Map(); all.concat(rainSt).forEach(x => { if (x.rain != null && x.rain >= 0 && x.lat != null) m.set(x.lat.toFixed(3) + "," + x.lon.toFixed(3), [Math.round(x.lat * 1000) / 1000, Math.round(x.lon * 1000) / 1000, x.rain, x.county || "", x.town || "", x.station]); }); return [...m.values()]; })()
     }));
   }
 

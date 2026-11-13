@@ -349,6 +349,9 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .sm-isl { display: flex; gap: 10px; font-size: 13px; color: var(--muted); align-self: flex-start; }
 .sm-isl i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--line); }
 #o-sm[hidden] { display: none; }
+.rleg { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.rleg span { display: inline-flex; align-items: center; gap: 3px; }
+.rleg i { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
 .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 4px 0 8px; }
 .chip { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px; border: 1.5px solid var(--line); border-radius: 12px; background: none; color: var(--ink); font: inherit; cursor: pointer; min-width: 0; }
 .chip .ck { font-size: 12px; color: var(--muted); }
@@ -808,6 +811,7 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
   </section>
   <section class="v-obs" id="o-rain" data-tab="rain" hidden>
     <h2>今日累積雨量</h2>
+    <div id="rain-map"></div>
     <a class="map" id="rain-link" target="_blank" rel="noopener"><img id="rain-img" alt="今日累積雨量分布圖" loading="lazy"></a>
     <span class="cap" id="rain-cap"></span>
   </section>
@@ -1374,6 +1378,7 @@ function setOtab(t, scroll) {
     if (t === "rain" && LMAP) LMAP.invalidateSize();
     if (t !== "sky" && SM) drawSmall();
     if (t === "temp" && OB && OB.obs) drawTempNow(OB.obs).catch(() => {});
+    if (t === "rain" && OB && OB.obs) drawRainNow(OB.obs).catch(() => {});
     if (t === "sky") { TYMAPS.forEach(m => m.invalidateSize()); drawTyMaps(); }
   });
 }
@@ -2243,7 +2248,13 @@ function drawObs() {
       $("sat-tabs").innerHTML = have.length > 1 ? have.map(k => `<button type="button" class="${k === satKind ? "on" : ""}" data-k="${k}">${names[k]}</button>`).join("") : "";
     }
   }
-  show("o-rain", !!M.rain); if (M.rain) { setImg("rain", M.rain); $("rain-cap").textContent = "從今天 0 點累積到 " + twTime(M.rain.time); }
+  show("o-rain", !!M.rain || !!(O && O.rall));
+  if (M.rain) { setImg("rain", M.rain); $("rain-cap").textContent = "從今天 0 點累積到 " + twTime(M.rain.time); }
+  $("rain-map").hidden = false;
+  drawRainNow(O).then(ok => {
+    $("rain-link").hidden = ok; $("rain-map").hidden = !ok;
+    if (ok) $("rain-cap").innerHTML = "今天 0 點到 " + twTime(O.time) + "・全臺雨量站" + (M.rain ? `・<a href="data/${M.rain.file}" target="_blank" rel="noopener">原圖</a>` : "");
+  }).catch(() => {});
   show("o-temp", !!M.temp || !!(O && O.tall));
   if (M.temp) { setImg("temp", M.temp); $("temp-cap").textContent = "觀測時間 " + twTime(M.temp.time) + "・數字是各氣象站的現在氣溫"; drawTempLabels(M.temp, O); }
   // 地形溫度圖：畫得出來就取代氣象署原圖（原圖留連結）
@@ -2503,6 +2514,8 @@ const demAt = (lat, lon) => {
 const TPAL = [[-10, [52, 62, 140]], [0, [64, 110, 185]], [5, [120, 175, 225]], [10, [185, 222, 232]], [13, [112, 190, 168]], [16, [72, 160, 112]], [19, [150, 196, 92]], [22, [222, 214, 96]], [25, [236, 176, 72]], [28, [229, 136, 60]], [30, [216, 98, 88]], [33, [199, 78, 120]], [37, [158, 88, 170]], [45, [192, 160, 222]]];
 const tpal = t => { if (t <= TPAL[0][0]) return TPAL[0][1]; for (let i = 1; i < TPAL.length; i++) if (t <= TPAL[i][0]) { const [a, ca] = TPAL[i - 1], [b, cb] = TPAL[i], f = (t - a) / (b - a); return [ca[0] + (cb[0] - ca[0]) * f, ca[1] + (cb[1] - ca[1]) * f, ca[2] + (cb[2] - ca[2]) * f]; } return TPAL[TPAL.length - 1][1]; };
 const LAPSE = 0.0065;
+// 雨量色階（毫米），跟雨量預報同一套；沒下雨回傳 null（灰色陸地）
+const rpal = mm => { if (mm < 0.5) return null; let c = null; for (const [v, k] of QPF_SHOW) if (mm >= v) c = k; return c; };
 const TDOM = { lon0: 119.95, lon1: 122.06, lat0: 21.87, lat1: 25.33 };
 // pts: [lat, lon, 溫度, 高度(公尺，可省略)]
 function tmapDraw(cv, pts, opts = {}) {
@@ -2511,8 +2524,9 @@ function tmapDraw(cv, pts, opts = {}) {
   cv.style.height = "auto"; cv.style.aspectRatio = W + " / " + H; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
   const P = p => [(p[0] - TDOM.lon0) * k * sx, (TDOM.lat1 - p[1]) * sx];
-  // 1. 把各點換成「海平面溫度」，在粗格子上內插
-  const S = pts.filter(p => p[2] != null).map(p => [p[0], p[1], p[2] + LAPSE * (p[3] != null ? p[3] : demAt(p[0], p[1]))]);
+  // 1. 把各點換成「海平面溫度」，在粗格子上內插（雨量不做高度修正）
+  const RAIN = opts.mode === "rain", lapse = RAIN ? 0 : LAPSE;
+  const S = pts.filter(p => p[2] != null).map(p => [p[0], p[1], p[2] + lapse * (p[3] != null ? p[3] : demAt(p[0], p[1]))]);
   if (!S.length) return null;
   const CR = 0.03, CX = Math.ceil((TDOM.lon1 - TDOM.lon0) / CR) + 2, CY = Math.ceil((TDOM.lat1 - TDOM.lat0) / CR) + 2, C0 = new Float32Array(CX * CY);
   for (let j = 0; j < CY; j++) for (let i = 0; i < CX; i++) {
@@ -2522,7 +2536,7 @@ function tmapDraw(cv, pts, opts = {}) {
     C0[j * CX + i] = a / b;
   }
   const t0At = (lat, lon) => { const x = (lon - TDOM.lon0) / CR, y = (lat - TDOM.lat0) / CR, i = Math.max(0, Math.min(CX - 2, Math.floor(x))), j = Math.max(0, Math.min(CY - 2, Math.floor(y))), fx = Math.min(1, Math.max(0, x - i)), fy = Math.min(1, Math.max(0, y - j)), o = j * CX + i; return C0[o] * (1 - fx) * (1 - fy) + C0[o + 1] * fx * (1 - fy) + C0[o + CX] * (1 - fx) * fy + C0[o + CX + 1] * fx * fy; };
-  const tAt = (lat, lon) => t0At(lat, lon) - LAPSE * demAt(lat, lon);
+  const tAt = (lat, lon) => t0At(lat, lon) - lapse * demAt(lat, lon);
   // 2. 每個畫面像素：溫度顏色 × 地形明暗（光從西北來）
   const PW = cv.width, PH = cv.height, img = c.createImageData(PW, PH), d = img.data;
   const D = DEM, dlat = D ? D.res : 0.008, dlon = dlat, mx = dlon * 111000 * k, my = dlat * 111000, ex = 1.6;
@@ -2531,8 +2545,8 @@ function tmapDraw(cv, pts, opts = {}) {
     const lat = TDOM.lat1 - (py + 0.5) / dpr / sx;
     for (let px = 0; px < PW; px++) {
       const lon = TDOM.lon0 + (px + 0.5) / dpr / sx / k;
-      const e = demAt(lat, lon), T = t0At(lat, lon) - LAPSE * e;
-      let col = tpal(T), sh = 1;
+      const e = demAt(lat, lon), T = t0At(lat, lon) - lapse * e;
+      let col = RAIN ? (rpal(T) || [150, 156, 164]) : tpal(T), sh = 1;
       if (D && e > 1) {
         const dzdx = (demAt(lat, lon + dlon) - demAt(lat, lon - dlon)) / (2 * mx) * ex, dzdy = (demAt(lat + dlat, lon) - demAt(lat - dlat, lon)) / (2 * my) * ex;
         const slope = Math.atan(Math.hypot(dzdx, dzdy)), aspect = Math.atan2(dzdy, -dzdx);
@@ -2562,7 +2576,7 @@ function tmapLabels(wrap, M, labels) {
   wrap.querySelectorAll(".tml, .tmlines").forEach(x => x.remove());
   const items = labels.map(L => {
     const [x, y] = M.P([L.lon, L.lat]), el = document.createElement("div");
-    el.innerHTML = `<small>${L.name}</small><b>${L.v}°</b>`;
+    el.innerHTML = `<small>${L.name}</small><b>${L.v}${L.u == null ? "°" : L.u}</b>`;
     wrap.appendChild(el);
     return { el, x, y, ly: y, lon: L.lon, me: L.me, name: L.name, right: L.me ? L.lon > 121.3 : TMAP_EAST.has(L.name) };
   });
@@ -2638,6 +2652,24 @@ async function drawTempCompare(box) {
     hd.hidden = false;
   } else hd.hidden = true;
   $("sm-legend").innerHTML = tmapLegend();
+}
+// 觀測：今天累積雨量
+async function drawRainNow(O) {
+  const box = $("rain-map"); if (!box || !O || !O.rall || O.rall.length < 50) return false;
+  const [s] = await Promise.all([loadSmall(), loadDem(), loadTownCoords()]);
+  if (!s || !DEM) return false;
+  box.innerHTML = `<div class="tmw"><div class="tmi"><canvas></canvas></div></div>`;
+  const M = tmapDraw(box.querySelector("canvas"), O.rall.map(r => [r[0], r[1], r[2], 0]), { mode: "rain" });
+  if (!M) return false;
+  const mm = v => v < 1 ? (v > 0 ? "<1" : "0") : Math.round(v);
+  const labs = [];
+  places.slice(0, 4).forEach(p => { const co = TCO[p.c] && TCO[p.c][p.t]; if (co) labs.push({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, lat: co[0], lon: co[1], v: mm(Math.max(0, M.tAt(co[0], co[1]))), u: "", me: true }); });
+  // 今天雨最多的幾個鄉鎮
+  const seen = new Set();
+  O.rall.filter(r => r[2] >= 1).sort((a, b) => b[2] - a[2]).forEach(r => { const k = r[3] + r[4]; if (seen.has(k) || seen.size >= 4 || !r[4]) return; if (!tmapFar(r[0], r[1], labs)) return; seen.add(k); labs.push({ name: r[4].replace(/[區鄉鎮市]$/, ""), lat: r[0], lon: r[1], v: mm(r[2]), u: "" }); });
+  tmapLabels(box.querySelector(".tmi"), M, labs);
+  box.insertAdjacentHTML("beforeend", `<div class="rleg">${QPF_SHOW.map(([v, c]) => `<span><i style="background:rgb(${c})"></i>${v}</span>`).join("")}<span class="muted">毫米</span></div>`);
+  return true;
 }
 // 觀測：現在的溫度
 async function drawTempNow(O) {
