@@ -965,11 +965,12 @@ async function main() {
         for (const r of T.f) {
           const ms = Date.parse(r[0]); if (ms < now - 3600e3 || ms > now + 48 * 3600e3) continue;
           const tw = new Date(ms + 8 * 3600e3), h = tw.getUTCHours(), day = tw.toISOString().slice(0, 10), si = SEG.findIndex(z => h >= z[0] && h < z[1]), key = day + si;
-          let g = segs.find(x => x.key === key); if (!g) { g = { key, day, si, pop: 0, th: false }; segs.push(g); }
-          g.pop = Math.max(g.pop, r[3] ?? 0); if (/雷/.test(r[5] || "")) g.th = true;
+          let g = segs.find(x => x.key === key); if (!g) { g = { key, day, si, pop: 0, th: false, wet: false }; segs.push(g); }
+          g.pop = Math.max(g.pop, r[3] ?? 0); if (/雷/.test(r[5] || "")) g.th = true; if (isRainCode(r[4])) g.wet = true;
         }
-        const first = segs.findIndex(g => g.pop >= 60); if (first < 0) return null;
-        let last = first; while (last + 1 < segs.length && segs[last + 1].pop >= 50) last++;
+        const rainy = g => g.pop >= 50 || (g.wet && g.pop >= 30);
+        const first = segs.findIndex(rainy); if (first < 0) return null;
+        let last = first; while (last + 1 < segs.length && rainy(segs[last + 1])) last++;
         const peak = segs.slice(first, last + 1).reduce((a, b) => b.pop > a.pop ? b : a), th = segs.slice(first, last + 1).some(g => g.th);
         const dn = d => { const a = ahead(d); return (a === 0 ? "今天" : a === 1 ? "明天" : dayName(d, a)) + `(${+d.slice(8)}日)`; };
         const lines = [`${dn(segs[first].day)}${SEG[segs[first].si][2]}起${th ? "有雷雨" : "有雨"}`];
