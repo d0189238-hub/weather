@@ -189,9 +189,9 @@ svg.ic .wet { stroke: var(--rain); }
 .ty-ic svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
 .ty-ic .body { fill: #e0412b; } .ty-ic .eye { fill: #ffd400; } .ty-ic path { fill: #e0412b; }
 .ty-ic .wk .body, .ty-ic .wk path { fill: #8a8f96; }
-.leaflet-tooltip.ty-tt { background: none; border: 0; box-shadow: none; padding: 0; color: #fff; font-family: "Noto Sans TC", sans-serif; font-weight: 700; font-size: 15px; line-height: 1.15; text-align: center; text-shadow: 0 0 3px #000, 0 0 6px #000; }
-.leaflet-tooltip.ty-tt b { display: block; font-size: 16px; }
-.leaflet-tooltip.ty-tt.sm { font-size: 12px; font-weight: 500; }
+.leaflet-tooltip.ty-tt { background: rgba(15,18,26,.25); border: 1.5px solid rgba(255,255,255,.9); border-radius: 999px; box-shadow: none; padding: 2px 9px; color: #fff; font-family: var(--body); font-weight: 600; font-size: 13px; line-height: 1.3; text-align: center; }
+.leaflet-tooltip.ty-tt b { margin-right: 5px; font-size: 14px; }
+.leaflet-tooltip.ty-tt.sm { font-size: 11px; font-weight: 500; padding: 1px 7px; }
 .leaflet-tooltip.ty-tt::before { display: none; }
 .ty-key { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
 .ty-key span { display: inline-flex; align-items: center; gap: 6px; }
@@ -325,7 +325,7 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .tleg[hidden] { display: none; }
 .tleg i { flex: 1; height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgb(52,110,180), rgb(130,205,220) 17%, rgb(46,140,84) 23%, rgb(140,198,108) 43%, rgb(238,234,150) 60%, rgb(241,168,82) 73%, rgb(212,72,52) 87%, rgb(118,22,92)); }
 .tlab rect { fill: rgba(255,255,255,.9); filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.25)); }
-.tlab text { font-family: "Noto Sans TC", -apple-system, "PingFang TC", sans-serif; font-weight: 500; font-size: 30px; text-anchor: middle; fill: #1c2a33; stroke: none; paint-order: stroke; stroke-linejoin: round; }
+.tlab text { font-family: var(--body); font-weight: 500; font-size: 30px; text-anchor: middle; fill: #1c2a33; stroke: none; paint-order: stroke; stroke-linejoin: round; }
 .map .lt { fill: #ffd400; stroke: #4a3a00; stroke-width: 2; }
 .map .lt.g { fill: #ff3b30; stroke: #fff; }
 .map .me { fill: none; stroke: #111; stroke-width: 5; }
@@ -344,7 +344,7 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .fc-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 5px; vertical-align: -2px; }
 .sm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .smf { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.smf figcaption { align-self: flex-start; font-family: var(--display); font-weight: 600; font-size: 16px; padding: 2px 10px; border-radius: 12px; background: var(--ink); color: var(--paper); }
+.smf figcaption { align-self: flex-start; font-family: var(--display); font-weight: 600; font-size: 15px; padding: 1px 10px; border-radius: 999px; border: 1.5px solid var(--ink); color: var(--ink); }
 .smf canvas { display: block; }
 .sm-isl { display: flex; gap: 10px; font-size: 13px; color: var(--muted); align-self: flex-start; }
 .sm-isl i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--line); }
@@ -352,7 +352,7 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .sat-span { margin: 8px 0 2px; }
 .sat-span button:disabled { opacity: .35; }
 .rb[hidden] { display: none; }
-.rb-h { margin: 6px 0 2px; font-family: "Noto Sans TC", sans-serif; font-weight: 900; font-size: 21px; line-height: 1.35; }
+.rb-h { margin: 6px 0 2px; font-family: var(--body); font-weight: 700; font-size: 21px; line-height: 1.35; }
 .rb-why { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
 .rb-d { margin: 10px 0 2px; font-weight: 700; font-size: 15px; border-left: 4px solid var(--ink); padding-left: 8px; }
 .rb-s { margin: 0; padding: 4px 0 4px 12px; font-size: 15px; border-left: 2px solid var(--line); display: flex; gap: 10px; }
@@ -361,24 +361,24 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .rb-s.wet span { color: #4f9fe2; }
 .sm-grid > .tmc { grid-column: 1 / -1; }
 .tmc { display: block; }
-.tmdays { display: flex; gap: 8px; margin-bottom: 4px; font-family: "Noto Sans TC", sans-serif; }
+.tmdays { display: flex; gap: 8px; margin-bottom: 4px; font-family: var(--body); }
 .tmdays button { border: 1.5px solid var(--line); background: none; color: var(--muted); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 14px; font-weight: 700; }
 .tmdays button.on { border-color: var(--ink); color: var(--ink); }
 .tmdays small { font-size: 11px; font-weight: 500; }
 .tmf { margin: 0; }
-.tmf figcaption { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; font-family: "Noto Sans TC", sans-serif; }
+.tmf figcaption { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; font-family: var(--body); }
 .tmf figcaption .d { border: 1.5px solid var(--ink); border-radius: 999px; padding: 2px 9px; font-size: 14px; font-weight: 700; }
 .tmf figcaption .d small { font-size: 10px; font-weight: 500; }
-.tmf figcaption .h { background: var(--ink); color: var(--paper); border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; }
+
 .tmw { padding: 16px 22% 0; }
 #temp-map .tmw { padding: 16px 16% 0; }
 .tmi { position: relative; }
 .tmi canvas { width: 100%; display: block; }
-.tml { position: absolute; transform: translate(-100%, -50%); margin-left: -3px; display: flex; align-items: center; gap: 1px; font-family: "Noto Sans TC", sans-serif; font-size: 9.5px; line-height: 1; white-space: nowrap; pointer-events: none; }
+.tml { position: absolute; transform: translate(-100%, -50%); margin-left: -3px; display: flex; align-items: center; gap: 1px; font-family: var(--body); font-size: 9.5px; line-height: 1; white-space: nowrap; pointer-events: none; }
 .tml.r { transform: translate(0, -50%); margin-left: 3px; }
 .tml { border: 1.5px solid rgba(255,255,255,.9); border-radius: 999px; padding: 2px 8px 2px 7px; gap: 4px !important; background: rgba(15,18,26,.25); color: #fff; align-items: baseline !important; }
 .tml small { font-size: 11px; font-weight: 500; opacity: .9; }
-.tml b { font-size: 15px; font-weight: 700; font-family: var(--display), "Noto Sans TC", sans-serif; letter-spacing: -.02em; }
+.tml b { font-size: 15px; font-weight: 700; font-family: var(--display); letter-spacing: -.02em; }
 
 
 .tml em { font-style: normal; font-weight: 700; font-size: 9.5px; padding: 2px 3px; border-radius: 999px; color: #fff; }
@@ -389,11 +389,11 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .tmlines line { stroke: rgba(255,255,255,.75); stroke-width: .7; }
 .tmlines circle { fill: #fff; stroke: #1b1f27; stroke-width: .6; }
 #temp-map .tml b { font-size: 16px; }
-.tmh { margin: 4px 0 0; font-family: "Noto Sans TC", sans-serif; font-weight: 900; font-size: 24px; line-height: 1.3; }
-.tmh u { text-decoration: none; background: linear-gradient(transparent 62%, rgba(226,72,86,.85) 62%); padding: 0 2px; }
-.tmh u.c { background: linear-gradient(transparent 62%, rgba(80,150,230,.85) 62%); }
-.tms { margin: 2px 0 8px; font-size: 13px; color: var(--muted); font-family: "Noto Sans TC", sans-serif; }
-.tms .hot { margin-left: 8px; background: #d9535f; color: #fff; border-radius: 999px; padding: 2px 8px; font-weight: 700; }
+.tmh { margin: 4px 0 0; font-family: var(--body); font-weight: 700; font-size: 24px; line-height: 1.3; }
+.tmh u { text-decoration: none; }
+
+.tms { margin: 2px 0 8px; font-size: 13px; color: var(--muted); font-family: var(--body); }
+.tms .hot { margin-left: 8px; border: 1px solid currentColor; border-radius: 999px; padding: 1px 8px; }
 .tmleg { flex: 1 1 100%; width: 100%; }
 #temp-map .tmleg { margin-top: 8px; }
 .tmleg > i { display: block; width: 100% !important; height: 6px !important; border-radius: 3px; margin: 0 !important; }
@@ -566,7 +566,8 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .tips .item.off svg.gi { opacity: .4; }
 .tips .item.off svg.gi .a { fill: var(--cloth); }
 
-.note { color: var(--muted); padding-top: var(--s2); border-top: 1px solid var(--line); font-size: 12px; line-height: 1.6; opacity: .75; font-family: "Noto Sans TC", sans-serif; }
+.cap { font-size: 13px; opacity: .8; }
+.note { color: var(--muted); padding-top: var(--s2); border-top: 1px solid var(--line); font-size: 12px; line-height: 1.6; opacity: .75; font-family: var(--body); }
 .note[hidden], .hist[hidden] { display: none; }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -763,7 +764,7 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
     </div>
     <div class="lmap" id="rmap" hidden><button type="button" class="lme" id="rmap-me">◎ 我的位置</button><span class="estb" id="r-est" hidden>推估：照雨帶現在的方向和速度往後推</span></div>
     <button type="button" class="eqbar" id="eq-bar" hidden></button>
-    <p class="cap" id="fault-note" hidden>紅線是經濟部公布的 36 條活動斷層（1/25,000 版），位置僅供參考，放大後不代表精確位置，不能用來判斷某棟建築是否在斷層上。</p>
+    <p class="cap" id="fault-note" hidden>紅線是經濟部公布的活動斷層，位置僅供參考</p>
     <a class="map" id="radar-link" target="_blank" rel="noopener"><img id="radar-img" alt="雷達整合回波圖，疊上過去一小時的閃電位置"><svg id="radar-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true"></svg></a>
     <div class="player" id="r-player" hidden>
       <button type="button" class="btn ghost" id="r-play" aria-label="播放雷達動畫">▶ 播放</button>
@@ -779,7 +780,7 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
     <div class="fc-legend" id="sm-legend"></div>
     <div id="sm-head" hidden></div>
     <p class="sm-me" id="sm-me" hidden></p>
-    <span class="cap" id="sm-cap">每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。</span>
+    <span class="cap" id="sm-cap">每 6 小時一張・氣象署鄉鎮預報</span>
   </section>
   <section class="v-obs" id="o-rain" data-tab="rain" hidden>
     <h2>今日累積雨量</h2>
@@ -823,10 +824,10 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
   <section class="v-obs" id="o-eq" data-tab="sky" hidden>
     <h2>最近地震</h2>
     <ul class="eq-list" id="eq-list"></ul>
-    <span class="cap">點任一筆會在上面的地圖標出震央，星號越大規模越大；紅色是最新一筆，橘色是 24 小時內。點星號可以看詳細資料和地震報告圖。震度用你選的地點附近 20 公里內的測站，沒有的話用縣市最大震度。</span>
+    <span class="cap">點一筆在地圖上看震央</span>
   </section>
   <section class="v-obs">
-    <p class="cap">點圖可以全螢幕放大，兩指張開再放大、單指拖曳移動。資料來源：中央氣象署。</p>
+    <p class="cap">點圖可全螢幕放大・資料來源：中央氣象署</p>
   </section>
 
   <p class="note" id="note"></p>
@@ -2161,7 +2162,7 @@ function drawObs() {
   if (M.radar) {
     setImg("radar", M.radar);
     $("radar-thumb").src = $("radar-img").src;
-    $("radar-cap").textContent = "觀測時間 " + twTime(M.radar.time) + "・顏色越紅越紫，雨越大";
+    $("radar-cap").textContent = twTime(M.radar.time) + " 觀測";
     const lo = M.radar.lon, la = M.radar.lat;
     let svg = "";
     if (lo && la) {
@@ -2170,11 +2171,11 @@ function drawObs() {
       if (here) svg += `<circle class="me" cx="${X(here.lon).toFixed(1)}" cy="${Y(here.lat).toFixed(1)}" r="16"/><circle class="me2" cx="${X(here.lon).toFixed(1)}" cy="${Y(here.lat).toFixed(1)}" r="6"/>`;
     }
     $("radar-svg").innerHTML = svg;
-    $("light-cap").textContent = lightText ? lightText + (n ? "。紅點是打到地面的閃電，黃點是雲裡的閃電" : "") + (here ? "，黑圈是你選的地點。" : "。") : "";
+    $("light-cap").textContent = lightText ? lightText + (n ? "・紅點落地、黃點雲中" : "") : "";
   }
   $("light-home").textContent = lightText || "雷達回波與觀測圖";
   drawMapMarks();
-  if (rgMode) $("radar-cap").textContent = "兩指可以放大到街道；顏色越紅越紫，雨越大。雨區一格約 1 公里見方。";
+  if (rgMode) $("radar-cap").textContent = "越紅越紫雨越大";
   show("obs-home", !!(M.radar || M.ir || M.vis || M.rain || M.temp || O));
   // 衛星雲圖：優先用高解析動畫，沒有的話用開放資料的單張圖
   const SL = OB.sat || {}, hiKeys = ["rgb", "ir"].filter(k => SL[k] && SL[k].frames && SL[k].frames.length);
@@ -2203,7 +2204,7 @@ function drawObs() {
   $("temp-map").hidden = false;
   drawTempNow(O).then(ok => {
     $("temp-link").hidden = ok; $("temp-map").hidden = !ok;
-    if (ok) $("temp-cap").innerHTML = "觀測時間 " + twTime(O.time) + "・全臺各氣象站現在的氣溫，依地形高度推算山區溫度" + (M.temp ? `・<a href="data/${M.temp.file}" target="_blank" rel="noopener">氣象署原圖</a>` : "");
+    if (ok) $("temp-cap").innerHTML = twTime(O.time) + " 觀測・山區依地形推算" + (M.temp ? `・<a href="data/${M.temp.file}" target="_blank" rel="noopener">原圖</a>` : "");
   }).catch(() => {});
   // 紫外線
   const uv = O && O.uv ? O.uv : [];
@@ -2231,7 +2232,7 @@ function drawObs() {
     $("rank").innerHTML = list.length ? list.map((r, i) =>
       `<li><span class="no">${i + 1}</span><span class="nm"><b>${r[0]}</b><span>${(r[1] || "") + (r[2] || "")}</span></span><span class="v">${r[3]}${unit}</span></li>`).join("")
       : `<li><span></span><span class="muted">今天全臺都還沒下雨</span><span></span></li>`;
-    $("rank-cap").textContent = "全臺測站，今天 0 點到 " + twTime(O.time) + "。";
+    $("rank-cap").textContent = "今天 0 點到 " + twTime(O.time);
   }
 }
 /* 雷達動畫：最近 2 小時，每 10 分鐘一張 */
@@ -2645,13 +2646,13 @@ function drawSmall() {
   $("sm-head").hidden = true;
   if (TM) {
     $("sm-title").textContent = "未來氣溫"; $("sm-me").hidden = true; $("o-sm").hidden = false;
-    $("sm-cap").textContent = "按上方日期切換。依氣象署鄉鎮預報，並按地形高度推算山區溫度。";
+    $("sm-cap").textContent = "氣象署鄉鎮預報・山區依地形推算";
     drawTempCompare(box).catch(() => {});
     return;
   }
   const idx = Q ? Q.periods.map((p, i) => i).slice(0, 4) : [0, 2, 4, 6].filter(i => i < fc.times.length);
   $("sm-title").textContent = Q ? "未來 48 小時雨量" : TM ? "未來 24 小時氣溫" : "未來 24 小時";
-  $("sm-cap").textContent = Q ? "每張是那 12 小時內預計會下的總雨量（毫米），白點是你選的地點。資料：氣象署定量降水預報，點地圖看原圖。" : TM ? "每 6 小時一張，依氣象署全臺鄉鎮預報的氣溫畫成，白點是你選的地點。" : "每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。";
+  $("sm-cap").textContent = Q ? "12 小時累積雨量・白點是你的地點・點圖看原圖" : TM ? "每 6 小時一張・白點是你的地點" : "每 6 小時一張・氣象署鄉鎮預報";
   const lo0 = 119.95, lo1 = 122.05, la0 = 21.87, la1 = 25.33, k = Math.cos(23.6 * Math.PI / 180);
   const cw = Math.floor((box.clientWidth - 10) / 2) || 160, ch = Math.round(cw * (la1 - la0) / ((lo1 - lo0) * k));
   const dpr = Math.min(3, window.devicePixelRatio || 1), sx = cw / (lo1 - lo0), sy = ch / (la1 - la0);
@@ -2780,7 +2781,7 @@ function setSat(layer) {
   showSat(SF.length - 1);
   const full = layer.full ? "data/" + layer.full.file + "?t=" + encodeURIComponent(layer.full.time) : "data/" + SF[SF.length - 1].file;
   $("sat-link").href = full;
-  $("sat-time").textContent = "最新 " + twTime(SF[SF.length - 1].time) + "・" + (satKind === "rgb" ? "白天的真實顏色，晚上會變暗，晚上請看紅外線。" : "顏色越亮、越偏紅紫，雲頂越高越冷，容易有強降雨。") + "點圖可以看高解析原圖。";
+  $("sat-time").textContent = "最新 " + twTime(SF[SF.length - 1].time) + "・" + (satKind === "rgb" ? "晚上請看紅外線" : "越亮越紅，雲越高、雨越強");
 }
 $("s-play").addEventListener("click", () => {
   if (sTimer) { stopSat(); return; }
