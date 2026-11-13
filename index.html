@@ -2478,12 +2478,12 @@ function tmapLabels(wrap, M, labels) {
     const [x, y] = M.P([L.lon, L.lat]), el = document.createElement("div");
     el.innerHTML = `<small>${L.name}</small><b>${L.v}°</b>`;
     wrap.appendChild(el);
-    return { el, x, y, ly: y, lon: L.lon, me: L.me, name: L.name, right: L.lon > 121.05 };
+    return { el, x, y, ly: y, lon: L.lon, me: L.me, name: L.name, right: L.me ? L.lon > 121.3 : TMAP_EAST.has(L.name) };
   });
   if (!items.length) return;
   // 左右兩側數量平衡：西邊太多時，把最靠內陸的移到東邊
   const L0 = () => items.filter(i => !i.right), R0 = () => items.filter(i => i.right);
-  while (L0().length > R0().length + 1) { const c = L0().sort((a, b) => b.lon - a.lon)[0]; c.right = true; }
+  while (L0().length > R0().length + 3) { const c = L0().filter(i => i.me && i.lon > 120.6).sort((a, b) => b.lon - a.lon)[0]; if (!c) break; c.right = true; }
   items.forEach(i => { i.el.className = "tml" + (i.me ? " me" : "") + (i.right ? " r" : ""); });
   // 每側由上往下排，保證不重疊，也不超出地圖上下
   const h = Math.max(...items.map(i => i.el.offsetHeight || 0), 24) + 4;
@@ -2505,8 +2505,9 @@ function tmapLabels(wrap, M, labels) {
   wrap.insertAdjacentHTML("beforeend", svg + "</svg>");
 }
 // 參考城市：離你選的地點太近的就不標，避免擠在一起
+const TMAP_EAST = new Set(["基隆", "臺北", "宜蘭", "花蓮", "臺東"]);
 const tmapFar = (lat, lon, mine) => !mine.some(m => Math.hypot(m.lat - lat, (m.lon - lon) * 0.92) < 0.08);
-const TMAP_CITIES = [["基隆", "基隆市", "仁愛區"], ["臺北", "臺北市", "中正區"], ["新竹", "新竹市", "東區"], ["宜蘭", "宜蘭縣", "宜蘭市"], ["臺中", "臺中市", "西屯區"], ["花蓮", "花蓮縣", "花蓮市"], ["嘉義", "嘉義市", "東區"], ["臺南", "臺南市", "中西區"], ["臺東", "臺東縣", "臺東市"], ["高雄", "高雄市", "苓雅區"], ["屏東", "屏東縣", "屏東市"]];
+const TMAP_CITIES = [["基隆", "基隆市", "仁愛區"], ["臺北", "臺北市", "中正區"], ["桃園", "桃園市", "桃園區"], ["新竹", "新竹市", "東區"], ["苗栗", "苗栗縣", "苗栗市"], ["宜蘭", "宜蘭縣", "宜蘭市"], ["臺中", "臺中市", "西屯區"], ["花蓮", "花蓮縣", "花蓮市"], ["嘉義", "嘉義市", "東區"], ["臺南", "臺南市", "中西區"], ["臺東", "臺東縣", "臺東市"], ["高雄", "高雄市", "苓雅區"], ["屏東", "屏東縣", "屏東市"]];
 function tmapLegend() {
   const stops = TPAL.map(([v, c]) => `rgb(${c.map(Math.round)}) ${(v + 10) / 55 * 100}%`).join(",");
   return `<div class="tmleg"><i style="background:linear-gradient(90deg,${stops})"></i><div>${[0, 10, 20, 30, 40].map(v => `<span style="left:${(v + 10) / 55 * 100}%">${v}°</span>`).join("")}</div></div>`;
@@ -2564,7 +2565,7 @@ async function drawTempNow(O) {
   const named = n => (O.temps || []).find(t => t[0] === n);
   const labs = [], mineL = [];
   places.slice(0, 4).forEach(p => { const co = TCO[p.c] && TCO[p.c][p.t]; if (!co) return; const r = near(co[0], co[1]); if (r) labs.push({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, lat: co[0], lon: co[1], v: Math.round(r[2]), me: true }); });
-  TMAP_CITIES.forEach(([n]) => { const t = named(n); if (t && tmapFar(t[2], t[3], labs)) mineL.push({ name: n, lat: t[2], lon: t[3], v: Math.round(t[1]) }); });
+  TMAP_CITIES.forEach(([n, c, t]) => { const co = TCO[c] && TCO[c][t]; if (!co || !tmapFar(co[0], co[1], labs)) return; const r = near(co[0], co[1]); if (r) mineL.push({ name: n, lat: co[0], lon: co[1], v: Math.round(r[2]) }); });
   labs.push(...mineL);
   tmapLabels(box.querySelector(".tmi"), M, labs);
   box.insertAdjacentHTML("beforeend", tmapLegend());
