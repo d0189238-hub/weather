@@ -362,7 +362,7 @@ main { touch-action: pan-y; }
 .tmf figcaption .d { border: 1.5px solid var(--ink); border-radius: 999px; padding: 2px 9px; font-size: 14px; font-weight: 700; }
 .tmf figcaption .d small { font-size: 10px; font-weight: 500; }
 .tmf figcaption .h { background: var(--ink); color: var(--paper); border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; }
-.tmw { padding: 16px 20% 0; }
+.tmw { padding: 16px 22% 0; }
 #temp-map .tmw { padding: 16px 16% 0; }
 .tmi { position: relative; }
 .tmi canvas { width: 100%; display: block; }
@@ -370,7 +370,7 @@ main { touch-action: pan-y; }
 .tml.r { transform: translate(0, -50%); margin-left: 3px; }
 .tml { border: 1.5px solid rgba(255,255,255,.9); border-radius: 999px; padding: 2px 8px 2px 7px; gap: 4px !important; background: rgba(15,18,26,.25); color: #fff; align-items: baseline !important; }
 .tml small { font-size: 11px; font-weight: 500; opacity: .9; }
-.tml b { font-size: 17px; font-weight: 700; font-family: var(--display), "Noto Sans TC", sans-serif; letter-spacing: -.02em; }
+.tml b { font-size: 15px; font-weight: 700; font-family: var(--display), "Noto Sans TC", sans-serif; letter-spacing: -.02em; }
 
 
 .tml em { font-style: normal; font-weight: 700; font-size: 9.5px; padding: 2px 3px; border-radius: 999px; color: #fff; }
@@ -380,7 +380,7 @@ main { touch-action: pan-y; }
 .tmlines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .tmlines line { stroke: rgba(255,255,255,.75); stroke-width: .7; }
 .tmlines circle { fill: #fff; stroke: #1b1f27; stroke-width: .6; }
-#temp-map .tml b { font-size: 19px; }
+#temp-map .tml b { font-size: 16px; }
 .tmh { margin: 4px 0 0; font-family: "Noto Sans TC", sans-serif; font-weight: 900; font-size: 24px; line-height: 1.3; }
 .tmh u { text-decoration: none; background: linear-gradient(transparent 62%, rgba(226,72,86,.85) 62%); padding: 0 2px; }
 .tmh u.c { background: linear-gradient(transparent 62%, rgba(80,150,230,.85) 62%); }
@@ -2161,6 +2161,7 @@ function drawObs() {
   show("o-temp", !!M.temp || !!(O && O.tall));
   if (M.temp) { setImg("temp", M.temp); $("temp-cap").textContent = "觀測時間 " + twTime(M.temp.time) + "・數字是各氣象站的現在氣溫"; drawTempLabels(M.temp, O); }
   // 地形溫度圖：畫得出來就取代氣象署原圖（原圖留連結）
+  $("temp-map").hidden = false;
   drawTempNow(O).then(ok => {
     $("temp-link").hidden = ok; $("temp-map").hidden = !ok;
     if (ok) $("temp-cap").innerHTML = "觀測時間 " + twTime(O.time) + "・全臺各氣象站現在的氣溫，依地形高度推算山區溫度" + (M.temp ? `・<a href="data/${M.temp.file}" target="_blank" rel="noopener">氣象署原圖</a>` : "");
@@ -2474,18 +2475,24 @@ function tmapDraw(cv, pts, opts = {}) {
 function tmapLabels(wrap, M, labels) {
   wrap.querySelectorAll(".tml, .tmlines").forEach(x => x.remove());
   const items = labels.map(L => {
-    const [x, y] = M.P([L.lon, L.lat]), right = L.lon > 121.05, el = document.createElement("div");
-    el.className = "tml" + (L.me ? " me" : "") + (right ? " r" : "");
+    const [x, y] = M.P([L.lon, L.lat]), el = document.createElement("div");
     el.innerHTML = `<small>${L.name}</small><b>${L.v}°</b>`;
     wrap.appendChild(el);
-    return { el, x, y, ly: y, right };
+    return { el, x, y, ly: y, lon: L.lon, me: L.me, right: L.lon > 121.05 };
   });
   if (!items.length) return;
-  // 同一側的標籤上下錯開，不互相蓋住；再用細線連回實際位置
-  const h = items[0].el.offsetHeight + 3;
+  // 左右兩側數量平衡：西邊太多時，把最靠內陸的移到東邊
+  const L0 = () => items.filter(i => !i.right), R0 = () => items.filter(i => i.right);
+  while (L0().length > R0().length + 1) { const c = L0().sort((a, b) => b.lon - a.lon)[0]; c.right = true; }
+  items.forEach(i => { i.el.className = "tml" + (i.me ? " me" : "") + (i.right ? " r" : ""); });
+  // 每側由上往下排，保證不重疊，也不超出地圖上下
+  const h = Math.max(...items.map(i => i.el.offsetHeight || 0), 24) + 4;
   for (const side of [false, true]) {
     const g = items.filter(i => i.right === side).sort((a, b) => a.y - b.y);
-    for (let k = 0; k < 40; k++) { let moved = false; for (let i = 1; i < g.length; i++) { const ov = g[i - 1].ly + h - g[i].ly; if (ov > 0.1) { g[i - 1].ly -= ov / 2; g[i].ly += ov / 2; moved = true; } } if (!moved) break; }
+    g.forEach((it, k) => { it.ly = Math.max(it.y, k ? g[k - 1].ly + h : h / 2); });
+    for (let k = g.length - 1; k >= 0; k--) { const lim = k === g.length - 1 ? M.H - h / 2 : g[k + 1].ly - h; if (g[k].ly > lim) g[k].ly = lim; }
+    // 往上推之後如果頂到上緣，再往下排一次
+    g.forEach((it, k) => { if (k ? it.ly < g[k - 1].ly + h : it.ly < h / 2) it.ly = k ? g[k - 1].ly + h : h / 2; });
   }
   let svg = `<svg class="tmlines" viewBox="0 0 ${M.W} ${M.H}" preserveAspectRatio="none">`;
   for (const i of items) {
@@ -2496,8 +2503,8 @@ function tmapLabels(wrap, M, labels) {
   wrap.insertAdjacentHTML("beforeend", svg + "</svg>");
 }
 // 參考城市：離你選的地點太近的就不標，避免擠在一起
-const tmapFar = (lat, lon, mine) => !mine.some(m => Math.hypot(m.lat - lat, (m.lon - lon) * 0.92) < 0.3);
-const TMAP_CITIES = [["臺北", "臺北市", "中正區"], ["臺中", "臺中市", "西屯區"], ["高雄", "高雄市", "苓雅區"], ["花蓮", "花蓮縣", "花蓮市"]];
+const tmapFar = (lat, lon, mine) => !mine.some(m => Math.hypot(m.lat - lat, (m.lon - lon) * 0.92) < 0.08);
+const TMAP_CITIES = [["基隆", "基隆市", "仁愛區"], ["臺北", "臺北市", "中正區"], ["新竹", "新竹市", "東區"], ["宜蘭", "宜蘭縣", "宜蘭市"], ["臺中", "臺中市", "西屯區"], ["花蓮", "花蓮縣", "花蓮市"], ["嘉義", "嘉義市", "東區"], ["臺南", "臺南市", "中西區"], ["臺東", "臺東縣", "臺東市"], ["高雄", "高雄市", "苓雅區"], ["屏東", "屏東縣", "屏東市"]];
 function tmapLegend() {
   const stops = TPAL.map(([v, c]) => `rgb(${c.map(Math.round)}) ${(v + 10) / 55 * 100}%`).join(",");
   return `<div class="tmleg"><i style="background:linear-gradient(90deg,${stops})"></i><div>${[0, 10, 20, 30, 40].map(v => `<span style="left:${(v + 10) / 55 * 100}%">${v}°</span>`).join("")}</div></div>`;
