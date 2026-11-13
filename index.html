@@ -310,7 +310,7 @@ main { touch-action: pan-y; }
 .v-obs[hidden], #obs-home[hidden] { display: none; }
 main[data-otab="rain"] .v-obs[data-tab]:not([data-tab~="rain"]), main[data-otab="temp"] .v-obs[data-tab]:not([data-tab~="temp"]), main[data-otab="sky"] .v-obs[data-tab]:not([data-tab~="sky"]) { display: none; }
 main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"] { display: none; }
-.otabs { position: sticky; top: 0; z-index: 20; display: flex; gap: 6px; padding: 10px 0; margin-bottom: 4px; background: var(--paper, #121726); }
+.otabs { position: sticky; top: 58px; z-index: 20; display: flex; gap: 6px; padding: 10px 0; margin-bottom: 4px; background: var(--paper, #121726); }
 .otabs button { flex: 1; position: relative; border: 1.5px solid var(--line); background: none; color: var(--muted); border-radius: 999px; padding: 8px 0; font: inherit; font-size: 17px; }
 .otabs button.on { border-color: var(--ink); color: var(--ink); font-weight: 700; }
 .otabs i { position: absolute; top: 6px; right: 18%; width: 8px; height: 8px; border-radius: 50%; background: #e2484f; }
@@ -349,6 +349,17 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .sm-isl { display: flex; gap: 10px; font-size: 13px; color: var(--muted); align-self: flex-start; }
 .sm-isl i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--line); }
 #o-sm[hidden] { display: none; }
+.pclose { margin-left: auto; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
+.hpanel { border: 1.5px solid var(--line); border-radius: 14px; padding: 14px 14px 16px !important; margin: 4px 0 8px; }
+.pr-say { margin: 0; font-size: 17px; font-weight: 600; }
+.pr-bars { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; height: 130px; margin-top: 6px; }
+.pr-bars span { white-space: nowrap; font-size: 11px; }
+.pr-bars div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; font-size: 12px; color: var(--muted); }
+.pr-bars i { width: 70%; border-radius: 4px 4px 0 0; background: var(--line); min-height: 3px; }
+.pr-bars .w i { background: #4f9fe2; } .pr-bars .w b { color: var(--ink); }
+.pr-bars b { font-family: var(--display); font-weight: 600; font-size: 14px; }
+.next-sun { margin-bottom: 6px; }
+
 .rleg { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 12px; color: var(--muted); }
 .rleg span { display: inline-flex; align-items: center; gap: 3px; }
 .rleg i { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
@@ -357,7 +368,7 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .chip .ck { font-size: 12px; color: var(--muted); }
 .chip b { font-family: var(--display); font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .chip.on { border-color: var(--ink); }
-.panel[hidden] { display: none; }
+.hpanel[hidden] { display: none; }
 .hero-say { margin: 6px 0 0; font-size: 17px; font-weight: 600; }
 .hero-say[hidden] { display: none; }
 details.rb { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
@@ -482,7 +493,7 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 .rank .v { font-family: var(--display); font-weight: 500; font-size: 26px; line-height: 1; }
 .rank li:first-child .no, .rank li:first-child .v { color: var(--c, var(--ink)); }
 .rank li:first-child .v { font-size: 34px; }
-.top.v-sub { color: var(--ink); justify-content: flex-start; }
+.top.v-sub { color: var(--ink); justify-content: flex-start; position: sticky; top: 0; z-index: 30; padding: 10px 0; background: var(--paper, #121726); }
 .top.v-sub strong { font-size: 20px; font-weight: 600; min-width: 0; }
 #back { white-space: nowrap; flex: none; }
 .tap { display: flex; flex-direction: column; gap: var(--s2); cursor: pointer; border-radius: 6px; }
@@ -639,24 +650,22 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
   <div class="v-home chips" id="chips">
     <button type="button" class="chip" data-go="air"><span class="ck">空氣</span><b id="c-aqi">—</b></button>
     <button type="button" class="chip" data-panel="p-wear"><span class="ck">穿著</span><b id="c-wear">—</b></button>
-    <button type="button" class="chip" data-panel="p-sun"><span class="ck">日落</span><b id="c-sun">—</b></button>
+    <button type="button" class="chip" data-panel="p-rain"><span class="ck">帶傘</span><b id="c-rain">—</b></button>
     <button type="button" class="chip" data-go="obs" id="c-obs-b"><span class="ck">觀測</span><b id="c-obs">雷達</b></button>
   </div>
-  <section class="v-home panel" id="p-wear" hidden>
+  <section class="v-home hpanel" id="p-wear" hidden>
     <div class="head">
-      <h2>穿著與生活建議</h2>
+      <h2>穿著與生活建議</h2><button type="button" class="pclose" aria-label="收起">收起 ▴</button>
       <div class="tabs" id="tabs" role="group" aria-label="時段"></div>
     </div>
     <div class="wear" id="wear"></div>
     <p class="muted" id="wear-note"></p>
     <div class="tips" id="tips"></div>
   </section>
-  <section class="v-home panel" id="p-sun" hidden>
-    <h2>日出日落</h2>
-    <div>
-      <div class="axis"><span>日出 <b id="rise"></b></span><span class="muted" id="daylen"></span><span>日落 <b id="set"></b></span></div>
-      <div class="daybar"><i id="sunpos"></i></div>
-    </div>
+  <section class="v-home hpanel" id="p-rain" hidden>
+    <div class="head"><h2>未來 24 小時降雨</h2><button type="button" class="pclose" aria-label="收起">收起 ▴</button></div>
+    <p class="pr-say" id="pr-say"></p>
+    <div class="pr-bars" id="pr-bars"></div>
   </section>
   <div hidden aria-hidden="true">
   <section>
@@ -701,6 +710,11 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
   </section>
   <section class="v-home next">
     <h2>接下來</h2>
+    <div class="next-sun">
+      <div class="axis"><span>日出 <b id="rise"></b></span><span class="muted" id="daylen"></span><span>日落 <b id="set"></b></span></div>
+      <div class="daybar"><i id="sunpos"></i></div>
+    </div>
+
     <h3 class="sub">逐三小時</h3>
     <p class="swing" id="swing"></p>
     <div>
@@ -1387,12 +1401,23 @@ setTimeout(() => setOtab(otab), 0);
 
 
 /* 首頁小標籤：空氣、穿著、日落、觀測；點穿著／日落展開，空氣／觀測直接進那一頁 */
+// 帶傘：未來 24 小時逐 3 小時降雨機率
+function renderRainPanel() {
+  const hs = (current && current.hours || []).slice(0, 8);
+  if (!hs.length) { $("c-rain").textContent = "—"; return; }
+  const lab = h => (h.day === 0 ? "" : h.day === 1 ? "明" : "後") + h.h + "時";
+  const wet = hs.filter(h => h.prob >= 50), first = wet[0], maxP = Math.max(...hs.map(h => h.prob));
+  $("c-rain").textContent = first ? (hs.indexOf(first) === 0 ? "要帶" : lab(first) + "起") : maxP >= 30 ? "折傘" : "不用";
+  $("pr-say").textContent = first ? `${hs.indexOf(first) === 0 ? "現在就可能下雨" : (first.day === 0 ? "今天 " : first.day === 1 ? "明天 " : "") + first.h + " 點起可能下雨"}，出門帶傘` : maxP >= 30 ? `可能有短暫雨（最高 ${maxP}%），帶把折傘比較保險` : "接下來 24 小時不太會下雨";
+  $("pr-bars").innerHTML = hs.map(h => `<div class="${h.prob >= 50 ? "w" : ""}"><b>${h.prob}%</b><i style="height:${Math.max(3, h.prob)}%"></i><span>${lab(h)}</span></div>`).join("");
+}
+document.addEventListener("click", e => { const c = e.target.closest(".pclose"); if (!c) return; c.closest(".hpanel").hidden = true; $("chips").querySelectorAll(".chip").forEach(x => x.classList.remove("on")); });
 function renderChips() {
   const t = id => ($(id) && $(id).textContent || "").trim();
   $("c-aqi").textContent = t("aqi") && t("aqi") !== "—" ? t("aqi") + " " + t("aqi-lv") : "—";
   const w = [...$("wear").querySelectorAll(".item span")].map(x => x.textContent);
   $("c-wear").textContent = w.length ? w[0] : "—";
-  $("c-sun").textContent = t("set") || "—";
+  renderRainPanel();
   const lh = t("light-home");
   $("c-obs").textContent = /閃電/.test(lh) && !/沒有/.test(lh) ? "有閃電" : "雷達";
   const rb = $("rb"), say = $("hero-say");
@@ -1402,7 +1427,7 @@ $("chips").addEventListener("click", e => {
   const b = e.target.closest(".chip"); if (!b) return;
   if (b.dataset.go) { go(b.dataset.go); return; }
   const p = $(b.dataset.panel), open = p.hidden;
-  ["p-wear", "p-sun"].forEach(id => { $(id).hidden = true; });
+  ["p-wear", "p-rain"].forEach(id => { $(id).hidden = true; });
   $("chips").querySelectorAll(".chip").forEach(c => c.classList.remove("on"));
   p.hidden = !open; b.classList.toggle("on", open);
 });
@@ -2721,7 +2746,7 @@ function drawSmall() {
   if (!SM) return;
   const box = $("sm-grid"), fc = SM.fc, Q = smKind === "rain" ? SM.qpf : null, TM = smKind === "temp";
   if (smKind === "rain" && !Q) { smKind = "pop"; }
-  $("sm-head").hidden = true;
+  $("sm-head").hidden = true; $("o-sm").hidden = false;
   if (TM) {
     $("sm-title").textContent = "未來氣溫"; $("sm-me").hidden = true; $("o-sm").hidden = false;
     $("sm-cap").textContent = "氣象署鄉鎮預報・山區依地形推算";
@@ -2732,7 +2757,7 @@ function drawSmall() {
   $("sm-title").textContent = Q ? "未來 48 小時雨量" : TM ? "未來 24 小時氣溫" : "未來 24 小時";
   $("sm-cap").textContent = Q ? "12 小時累積雨量・白點是你的地點・點圖看原圖" : TM ? "每 6 小時一張・白點是你的地點" : "每 6 小時一張・氣象署鄉鎮預報";
   const lo0 = 119.95, lo1 = 122.05, la0 = 21.87, la1 = 25.33, k = Math.cos(23.6 * Math.PI / 180);
-  const cw = Math.floor((box.clientWidth - 10) / 2) || 160, ch = Math.round(cw * (la1 - la0) / ((lo1 - lo0) * k));
+  const bw = box.clientWidth || ($("app").clientWidth - 40) || 340, cw = Math.max(120, Math.floor((bw - 10) / 2)), ch = Math.round(cw * (la1 - la0) / ((lo1 - lo0) * k));
   const dpr = Math.min(3, window.devicePixelRatio || 1), sx = cw / (lo1 - lo0), sy = ch / (la1 - la0);
   const P = ([x, y]) => [(x - lo0) * sx, (la1 - y) * sy];
   const path = (ctx, g) => { const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates; ctx.beginPath(); for (const poly of polys) for (const ring of poly) ring.forEach((p, i) => { const [x, y] = P(p); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); };
