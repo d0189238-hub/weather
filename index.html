@@ -343,6 +343,36 @@ main { touch-action: pan-y; }
 .sm-isl { display: flex; gap: 10px; font-size: 13px; color: var(--muted); align-self: flex-start; }
 .sm-isl i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--line); }
 #o-sm[hidden] { display: none; }
+.sm-grid > .tmc { grid-column: 1 / -1; }
+.tmc { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tmf { margin: 0; }
+.tmf figcaption { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; font-family: "Noto Sans TC", sans-serif; }
+.tmf figcaption .d { border: 1.5px solid var(--ink); border-radius: 999px; padding: 2px 9px; font-size: 14px; font-weight: 700; }
+.tmf figcaption .d small { font-size: 10px; font-weight: 500; }
+.tmf figcaption .h { background: var(--ink); color: var(--paper); border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; }
+.tmw { padding: 14px 23% 0 15%; }
+#temp-map .tmw { padding: 16px 16% 0; }
+.tmi { position: relative; }
+.tmi canvas { width: 100%; display: block; }
+.tml { position: absolute; transform: translate(-100%, -50%); margin-left: -3px; display: flex; align-items: center; gap: 1px; font-family: "Noto Sans TC", sans-serif; font-size: 9.5px; line-height: 1; white-space: nowrap; pointer-events: none; }
+.tml.r { transform: translate(0, -50%); margin-left: 3px; }
+.tml b { border: 1px solid rgba(255,255,255,.9); color: #fff; background: rgba(20,24,32,.55); border-radius: 999px; padding: 1px 4px; font-weight: 700; }
+.tml span { background: rgba(120,124,132,.85); color: #fff; border-radius: 999px; padding: 2px 4px; font-weight: 700; }
+.tml.me b { background: #fff; color: #1b1f27; }
+.tml em { font-style: normal; font-weight: 700; font-size: 9.5px; padding: 2px 3px; border-radius: 999px; color: #fff; }
+.tml em.up { background: #d9535f; } .tml em.dn { background: #3f84d6; }
+#temp-map .tml { font-size: 13px; }
+.tmh { margin: 4px 0 0; font-family: "Noto Sans TC", sans-serif; font-weight: 900; font-size: 24px; line-height: 1.3; }
+.tmh u { text-decoration: none; background: linear-gradient(transparent 62%, rgba(226,72,86,.85) 62%); padding: 0 2px; }
+.tmh u.c { background: linear-gradient(transparent 62%, rgba(80,150,230,.85) 62%); }
+.tms { margin: 2px 0 8px; font-size: 13px; color: var(--muted); font-family: "Noto Sans TC", sans-serif; }
+.tms .hot { margin-left: 8px; background: #d9535f; color: #fff; border-radius: 999px; padding: 2px 8px; font-weight: 700; }
+.tmleg { flex: 1 1 100%; width: 100%; }
+#temp-map .tmleg { margin-top: 8px; }
+.tmleg > i { display: block; width: 100% !important; height: 6px !important; border-radius: 3px; margin: 0 !important; }
+.tmleg div { position: relative; height: 14px; font-size: 10px; color: var(--muted); }
+.tmleg span { position: absolute; transform: translateX(-50%); top: 2px; }
+
 .sm-me { margin: 4px 0 0; font-size: 16px; }
 .sm-me em { font-style: normal; font-family: var(--display); font-size: 22px; font-weight: 600; }
 .smf[data-img] { cursor: zoom-in; }
@@ -700,6 +730,7 @@ main { touch-action: pan-y; }
     <div class="sat-h"><h2 id="sm-title">未來 24 小時</h2><span class="sat-t" id="sm-kind"><button type="button" class="on" data-k="wx">天氣</button><button type="button" data-k="rain">雨量</button><button type="button" data-k="temp">溫度</button></span></div>
     <div class="sm-grid" id="sm-grid"></div>
     <div class="fc-legend" id="sm-legend"></div>
+    <div id="sm-head" hidden></div>
     <p class="sm-me" id="sm-me" hidden></p>
     <span class="cap" id="sm-cap">每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。</span>
   </section>
@@ -737,6 +768,7 @@ main { touch-action: pan-y; }
   </section>
   <section class="v-obs" id="o-temp" hidden>
     <h2>溫度分布</h2>
+    <div id="temp-map"></div>
     <a class="map" id="temp-link" target="_blank" rel="noopener"><img id="temp-img" alt="全臺溫度分布圖" loading="lazy"><svg id="temp-svg" class="tlab" viewBox="0 0 880 880" preserveAspectRatio="none" aria-hidden="true"></svg></a>
     <div class="tleg" id="temp-legend" hidden><span>5°</span><i></i><span>35°</span></div>
     <span class="cap" id="temp-isl"></span>
@@ -2063,7 +2095,13 @@ function drawObs() {
     }
   }
   show("o-rain", !!M.rain); if (M.rain) { setImg("rain", M.rain); $("rain-cap").textContent = "從今天 0 點累積到 " + twTime(M.rain.time); }
-  show("o-temp", !!M.temp); if (M.temp) { setImg("temp", M.temp); $("temp-cap").textContent = "觀測時間 " + twTime(M.temp.time) + "・數字是各氣象站的現在氣溫"; drawTempLabels(M.temp, O); }
+  show("o-temp", !!M.temp || !!(O && O.tall));
+  if (M.temp) { setImg("temp", M.temp); $("temp-cap").textContent = "觀測時間 " + twTime(M.temp.time) + "・數字是各氣象站的現在氣溫"; drawTempLabels(M.temp, O); }
+  // 地形溫度圖：畫得出來就取代氣象署原圖（原圖留連結）
+  drawTempNow(O).then(ok => {
+    $("temp-link").hidden = ok; $("temp-map").hidden = !ok;
+    if (ok) $("temp-cap").innerHTML = "觀測時間 " + twTime(O.time) + "・全臺各氣象站現在的氣溫，依地形高度推算山區溫度" + (M.temp ? `・<a href="data/${M.temp.file}" target="_blank" rel="noopener">氣象署原圖</a>` : "");
+  }).catch(() => {});
   // 紫外線
   const uv = O && O.uv ? O.uv : [];
   show("o-uv", uv.length > 0);
@@ -2291,6 +2329,151 @@ async function loadSmall() {
   } catch (e) { SM = null; }
   return SM;
 }
+/* ---------- 地形溫度圖：地形明暗＋依高度修正的溫度色帶、城市標籤、兩天比較 ---------- */
+let DEM = null, TCO = null;
+async function loadDem() {
+  if (DEM) return DEM;
+  try {
+    const j = await fetch("data/dem.json").then(r => r.ok ? r.json() : null);
+    if (!j || !j.d) return null;
+    const b = atob(j.d), u8 = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u8[i] = b.charCodeAt(i);
+    DEM = { ...j, e: new Int16Array(u8.buffer) };
+  } catch (e) { DEM = null; }
+  return DEM;
+}
+async function loadTownCoords() { if (!TCO) { try { TCO = await fetch("data/towncoords.json", { cache: "no-cache" }).then(r => r.json()); } catch (e) { TCO = {}; } } return TCO; }
+const demAt = (lat, lon) => {
+  const D = DEM; if (!D) return 0;
+  const x = (lon - D.lon0) / D.res - 0.5, y = (lat - D.lat0) / D.res - 0.5, i = Math.floor(x), j = Math.floor(y);
+  if (i < 0 || j < 0 || i >= D.X - 1 || j >= D.Y - 1) return 0;
+  const fx = x - i, fy = y - j, e = D.e, X = D.X, o = j * X + i;
+  return Math.max(0, e[o] * (1 - fx) * (1 - fy) + e[o + 1] * fx * (1 - fy) + e[o + X] * (1 - fx) * fy + e[o + X + 1] * fx * fy);
+};
+// 色階：冷藍 → 涼綠 → 暖黃 → 熱橘 → 很熱紅紫
+const TPAL = [[-10, [52, 62, 140]], [0, [64, 110, 185]], [5, [120, 175, 225]], [10, [185, 222, 232]], [13, [112, 190, 168]], [16, [72, 160, 112]], [19, [150, 196, 92]], [22, [222, 214, 96]], [25, [236, 176, 72]], [28, [229, 136, 60]], [30, [216, 98, 88]], [33, [199, 78, 120]], [37, [158, 88, 170]], [45, [192, 160, 222]]];
+const tpal = t => { if (t <= TPAL[0][0]) return TPAL[0][1]; for (let i = 1; i < TPAL.length; i++) if (t <= TPAL[i][0]) { const [a, ca] = TPAL[i - 1], [b, cb] = TPAL[i], f = (t - a) / (b - a); return [ca[0] + (cb[0] - ca[0]) * f, ca[1] + (cb[1] - ca[1]) * f, ca[2] + (cb[2] - ca[2]) * f]; } return TPAL[TPAL.length - 1][1]; };
+const LAPSE = 0.0065;
+const TDOM = { lon0: 119.95, lon1: 122.06, lat0: 21.87, lat1: 25.33 };
+// pts: [lat, lon, 溫度, 高度(公尺，可省略)]
+function tmapDraw(cv, pts, opts = {}) {
+  const dpr = Math.min(3, window.devicePixelRatio || 1), W = cv.clientWidth || 180, k = Math.cos(23.6 * Math.PI / 180);
+  const sx = W / ((TDOM.lon1 - TDOM.lon0) * k), H = Math.round((TDOM.lat1 - TDOM.lat0) * sx);
+  cv.style.height = H + "px"; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+  const P = p => [(p[0] - TDOM.lon0) * k * sx, (TDOM.lat1 - p[1]) * sx];
+  // 1. 把各點換成「海平面溫度」，在粗格子上內插
+  const S = pts.filter(p => p[2] != null).map(p => [p[0], p[1], p[2] + LAPSE * (p[3] != null ? p[3] : demAt(p[0], p[1]))]);
+  if (!S.length) return null;
+  const CR = 0.03, CX = Math.ceil((TDOM.lon1 - TDOM.lon0) / CR) + 2, CY = Math.ceil((TDOM.lat1 - TDOM.lat0) / CR) + 2, C0 = new Float32Array(CX * CY);
+  for (let j = 0; j < CY; j++) for (let i = 0; i < CX; i++) {
+    const lon = TDOM.lon0 + i * CR, lat = TDOM.lat0 + j * CR, near = [];
+    for (const p of S) { const d = ((p[1] - lon) * k) ** 2 + (p[0] - lat) ** 2; if (near.length < 8) { near.push([d, p[2]]); if (near.length === 8) near.sort((a, b) => a[0] - b[0]); } else if (d < near[7][0]) { near[7] = [d, p[2]]; near.sort((a, b) => a[0] - b[0]); } }
+    let a = 0, b = 0; for (const [d, v] of near) { const w = 1 / (d + 2e-4); a += w * v; b += w; }
+    C0[j * CX + i] = a / b;
+  }
+  const t0At = (lat, lon) => { const x = (lon - TDOM.lon0) / CR, y = (lat - TDOM.lat0) / CR, i = Math.max(0, Math.min(CX - 2, Math.floor(x))), j = Math.max(0, Math.min(CY - 2, Math.floor(y))), fx = Math.min(1, Math.max(0, x - i)), fy = Math.min(1, Math.max(0, y - j)), o = j * CX + i; return C0[o] * (1 - fx) * (1 - fy) + C0[o + 1] * fx * (1 - fy) + C0[o + CX] * (1 - fx) * fy + C0[o + CX + 1] * fx * fy; };
+  const tAt = (lat, lon) => t0At(lat, lon) - LAPSE * demAt(lat, lon);
+  // 2. 每個畫面像素：溫度顏色 × 地形明暗（光從西北來）
+  const PW = cv.width, PH = cv.height, img = c.createImageData(PW, PH), d = img.data;
+  const D = DEM, dlat = D ? D.res : 0.008, dlon = dlat, mx = dlon * 111000 * k, my = dlat * 111000, ex = 1.6;
+  const az = 315 * Math.PI / 180, zen = 50 * Math.PI / 180, cz = Math.cos(zen), szn = Math.sin(zen);
+  for (let py = 0; py < PH; py++) {
+    const lat = TDOM.lat1 - (py + 0.5) / dpr / sx;
+    for (let px = 0; px < PW; px++) {
+      const lon = TDOM.lon0 + (px + 0.5) / dpr / sx / k;
+      const e = demAt(lat, lon), T = t0At(lat, lon) - LAPSE * e;
+      let col = tpal(T), sh = 1;
+      if (D && e > 1) {
+        const dzdx = (demAt(lat, lon + dlon) - demAt(lat, lon - dlon)) / (2 * mx) * ex, dzdy = (demAt(lat + dlat, lon) - demAt(lat - dlat, lon)) / (2 * my) * ex;
+        const slope = Math.atan(Math.hypot(dzdx, dzdy)), aspect = Math.atan2(dzdy, -dzdx);
+        const hs = cz * Math.cos(slope) + szn * Math.sin(slope) * Math.cos(az - aspect);
+        sh = 0.45 + 0.75 * Math.max(0, hs);
+      }
+      const o = (py * PW + px) * 4;
+      d[o] = Math.min(255, col[0] * sh); d[o + 1] = Math.min(255, col[1] * sh); d[o + 2] = Math.min(255, col[2] * sh); d[o + 3] = 255;
+    }
+  }
+  const off = document.createElement("canvas"); off.width = PW; off.height = PH; off.getContext("2d").putImageData(img, 0, 0);
+  // 3. 剪成臺灣陸地，再畫鄉鎮、縣市界
+  const outline = g => { const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates; for (const poly of polys) for (const ring of poly) ring.forEach((p, n) => { const [x, y] = P(p); n ? c.lineTo(x, y) : c.moveTo(x, y); }); };
+  c.save(); c.beginPath(); for (const t of SM.towns) outline(t.geom); c.clip("nonzero");
+  c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(off, 0, 0); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.restore();
+  c.lineJoin = "round";
+  c.strokeStyle = "rgba(40,30,30,.16)"; c.lineWidth = 0.35; for (const t of SM.towns) { c.beginPath(); outline(t.geom); c.stroke(); }
+  c.strokeStyle = "rgba(30,25,25,.55)"; c.lineWidth = 0.8; for (const g of SM.counties) { c.beginPath(); outline(g); c.stroke(); }
+  return { tAt, P, W, H };
+}
+// 城市標籤（白框名稱＋灰底溫度，可加升降溫）
+function tmapLabels(wrap, M, labels) {
+  wrap.querySelectorAll(".tml").forEach(x => x.remove());
+  for (const L of labels) {
+    const [x, y] = M.P([L.lon, L.lat]), el = document.createElement("div");
+    el.className = "tml" + (L.me ? " me" : "") + (x > M.W * 0.6 ? " r" : "");
+    el.style.left = (x / M.W * 100) + "%"; el.style.top = (y / M.H * 100) + "%";
+    el.innerHTML = `<b>${L.name}</b><span>${L.v}°</span>` + (L.delta != null && Math.round(L.delta) !== 0 ? `<em class="${L.delta > 0 ? "up" : "dn"}">${L.delta > 0 ? "+" : "−"}${Math.abs(Math.round(L.delta))}</em>` : "");
+    wrap.appendChild(el);
+  }
+}
+const TMAP_CITIES = [["臺北", "臺北市", "中正區"], ["臺中", "臺中市", "西屯區"], ["臺南", "臺南市", "中西區"], ["高雄", "高雄市", "苓雅區"], ["花蓮", "花蓮縣", "花蓮市"]];
+function tmapLegend() {
+  const stops = TPAL.map(([v, c]) => `rgb(${c.map(Math.round)}) ${(v + 10) / 55 * 100}%`).join(",");
+  return `<div class="tmleg"><i style="background:linear-gradient(90deg,${stops})"></i><div>${[-10, 0, 10, 20, 25, 30, 37, 45].map(v => `<span style="left:${(v + 10) / 55 * 100}%">${v === -10 ? "≤-10" : v === 45 ? "≥45" : v}</span>`).join("")}</div></div>`;
+}
+// 未來溫度：兩個中午並排
+async function drawTempCompare(box) {
+  const fc = SM.fc; await Promise.all([loadDem(), loadTownCoords()]);
+  const tw = ms => new Date(ms + 8 * 3600e3);
+  const noon = fc.times.map((t, i) => [i, Date.parse(t)]).filter(([i, ms]) => { const h = tw(ms).getUTCHours(); return h >= 11 && h <= 14; });
+  const seen = new Set(), picks = [];
+  for (const [i, ms] of noon) { const day = tw(ms).toISOString().slice(0, 10); if (!seen.has(day)) { seen.add(day); picks.push([i, ms]); } }
+  if (!picks.length) { box.innerHTML = ""; return; }
+  const two = picks.slice(0, 2);
+  const ptsOf = i => { const out = []; for (const key in fc.towns) { const [cc, tt] = key.split("|"), co = TCO[cc] && TCO[cc][tt], v = fc.towns[key][i]; if (co && v && v[2] != null) out.push([co[0], co[1], v[2]]); } return out; };
+  const valAt = (i, cc, tt) => { const v = fc.towns[cc + "|" + tt]; return v && v[i] ? Math.round(v[i][2]) : null; };
+  const WKN = ["日", "一", "二", "三", "四", "五", "六"], dayLab = ms => { const t = tw(ms); return `週${WKN[t.getUTCDay()]}<small>(${t.getUTCDate()}日)</small>`; };
+  const mine = places.slice(0, 4).map(p => ({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, c: p.c, t: p.t, me: true }));
+  const cities = TMAP_CITIES.map(([n, c, t]) => ({ name: n, c, t })).filter(x => !mine.some(m => m.c === x.c && m.t === x.t));
+  box.innerHTML = `<div class="tmc">${two.map((p, n) => `<figure class="tmf"><figcaption><span class="d">${dayLab(p[1])}</span><span class="h">中午</span></figcaption><div class="tmw"><div class="tmi"><canvas></canvas></div></div></figure>`).join("")}</div>`;
+  const vals = [];
+  box.querySelectorAll(".tmf").forEach((f, n) => {
+    const [i] = two[n], M = tmapDraw(f.querySelector("canvas"), ptsOf(i));
+    if (!M) return;
+    const labs = cities.concat(mine).map(x => { const co = TCO[x.c] && TCO[x.c][x.t], v = valAt(i, x.c, x.t); return co && v != null ? { ...x, lat: co[0], lon: co[1], v } : null; }).filter(Boolean);
+    if (n === 1 && vals[0]) labs.forEach(L => { const a = vals[0].find(z => z.c === L.c && z.t === L.t); if (a) L.delta = L.v - a.v; });
+    vals.push(labs);
+    tmapLabels(f.querySelector(".tmi"), M, labs);
+  });
+  // 大標題：兩天比較
+  const hd = $("sm-head");
+  if (vals.length === 2) {
+    const ds = vals[1].map(L => L.delta).filter(x => x != null), avg = ds.length ? ds.reduce((a, b) => a + b, 0) / ds.length : 0;
+    const hiB = Math.max(...vals[1].map(L => L.v)), lowB = Math.min(...vals[1].map(L => L.v));
+    const nB = dayLab(two[1][1]).replace(/<small>.*<\/small>/, ""), nA = dayLab(two[0][1]).replace(/<small>.*<\/small>/, "");
+    const word = avg >= 1.5 ? `<u class="w">更暖</u>` : avg <= -1.5 ? `<u class="c">轉涼</u>` : `差不多`;
+    const hot = ptsOf(two[1][0]).some(p => p[2] >= 30);
+    hd.innerHTML = `<p class="tmh">${nB}中午，${avg >= 1.5 || avg <= -1.5 ? "比" + nA + word : "跟" + nA + word}</p><p class="tms">主要城市 ${lowB}–${hiB}°${ds.length ? `，平均${avg >= 0 ? "高" : "低"} ${Math.abs(avg).toFixed(1)}°` : ""}${hot ? `<span class="hot">局部高溫 30° 以上</span>` : ""}</p>`;
+    hd.hidden = false;
+  } else hd.hidden = true;
+  $("sm-legend").innerHTML = tmapLegend();
+}
+// 觀測：現在的溫度
+async function drawTempNow(O) {
+  const box = $("temp-map"); if (!box || !O || !O.tall || !O.tall.length) return false;
+  const [s] = await Promise.all([loadSmall(), loadDem(), loadTownCoords()]);
+  if (!s || !DEM) return false;
+  box.innerHTML = `<div class="tmw"><div class="tmi"><canvas></canvas></div></div>`;
+  const M = tmapDraw(box.querySelector("canvas"), O.tall.map(r => [r[0], r[1], r[2], r[3]]));
+  if (!M) return false;
+  const near = (lat, lon) => { let best = null, bd = 1e9; for (const r of O.tall) { const d = (r[0] - lat) ** 2 + ((r[1] - lon) * 0.92) ** 2; if (d < bd) { bd = d; best = r; } } return bd < 0.0081 ? best : null; };
+  const named = n => (O.temps || []).find(t => t[0] === n);
+  const labs = [];
+  TMAP_CITIES.forEach(([n]) => { const t = named(n); if (t) labs.push({ name: n, lat: t[2], lon: t[3], v: Math.round(t[1]) }); });
+  places.slice(0, 4).forEach(p => { const co = TCO[p.c] && TCO[p.c][p.t]; if (!co) return; const r = near(co[0], co[1]); if (r) labs.push({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, lat: co[0], lon: co[1], v: Math.round(r[2]), me: true }); });
+  tmapLabels(box.querySelector(".tmi"), M, labs);
+  box.insertAdjacentHTML("beforeend", tmapLegend());
+  return true;
+}
 /* 雨量預報：氣象署每 12 小時累積雨量（毫米），色階 index 1..17 對應 0.5、1、2、5、10、15、20、30、40、50、70、90、110、130、150、200、300 */
 const QPF_LO = [0, 0.5, 1, 2, 5, 10, 15, 20, 30, 40, 50, 70, 90, 110, 130, 150, 200, 300], QPF_HI = [0.5, 1, 2, 5, 10, 15, 20, 30, 40, 50, 70, 90, 110, 130, 150, 200, 300, 400];
 // 跟氣象署雨量圖同一套直覺：藍＝小雨，綠黃＝明顯的雨，橘紅紫＝大雨
@@ -2323,6 +2506,13 @@ function drawSmall() {
   if (!SM) return;
   const box = $("sm-grid"), fc = SM.fc, Q = smKind === "rain" ? SM.qpf : null, TM = smKind === "temp";
   if (smKind === "rain" && !Q) { smKind = "pop"; }
+  $("sm-head").hidden = true;
+  if (TM) {
+    $("sm-title").textContent = "未來氣溫"; $("sm-me").hidden = true; $("o-sm").hidden = false;
+    $("sm-cap").textContent = "接下來兩天中午的氣溫，依氣象署鄉鎮預報並按地形高度推算山區溫度；紅、藍小字是跟前一天比的升降溫。";
+    drawTempCompare(box).catch(() => {});
+    return;
+  }
   const idx = Q ? Q.periods.map((p, i) => i).slice(0, 4) : [0, 2, 4, 6].filter(i => i < fc.times.length);
   $("sm-title").textContent = Q ? "未來 48 小時雨量" : TM ? "未來 24 小時氣溫" : "未來 24 小時";
   $("sm-cap").textContent = Q ? "每張是那 12 小時內預計會下的總雨量（毫米），白點是你選的地點。資料：氣象署定量降水預報，點地圖看原圖。" : TM ? "每 6 小時一張，依氣象署全臺鄉鎮預報的氣溫畫成，白點是你選的地點。" : "每 6 小時一張，依氣象署鄉鎮預報畫出全臺每個鄉鎮。";
