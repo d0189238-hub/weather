@@ -165,7 +165,7 @@ function stations(json) {
     return {
       station: ci(s, "StationName"), time: ci(ci(s, "ObsTime"), "DateTime"),
       county: ci(geo, "CountyName"), town: ci(geo, "TownName"),
-      lat: num(ci(co, "StationLatitude")), lon: num(ci(co, "StationLongitude")),
+      lat: num(ci(co, "StationLatitude")), lon: num(ci(co, "StationLongitude")), alt: num(ci(geo, "StationAltitude")),
       temp: num(ci(we, "AirTemperature")), rh: num(ci(we, "RelativeHumidity")),
       ws: num(ci(we, "WindSpeed")), wd: num(ci(we, "WindDirection")), rain: num(ci(ci(we, "Now"), "Precipitation")),
       uv: num(ci(we, "UVIndex")),
@@ -350,7 +350,7 @@ async function main() {
       time: (all.find(x => x.syn) || all[0]).time,
       uv: all.filter(x => x.syn && x.uv !== null && x.uv >= 0).map(x => pick(x).concat(x.uv, x.lat, x.lon)),
       temps: all.filter(x => (x.syn || ["斗六", "埔里", "梧棲"].includes(x.station)) && x.temp !== null && x.temp > -30 && x.lat != null).map(x => [x.station, x.temp, x.lat, x.lon, x.county || ""]),
-      tall: all.filter(x => x.temp !== null && x.temp > -30 && x.temp < 50 && x.lat != null && x.lon != null).map(x => [Math.round(x.lat * 1000) / 1000, Math.round(x.lon * 1000) / 1000, x.temp]),
+      tall: all.filter(x => x.temp !== null && x.temp > -30 && x.temp < 50 && x.lat != null && x.lon != null).map(x => [Math.round(x.lat * 1000) / 1000, Math.round(x.lon * 1000) / 1000, x.temp, x.alt == null ? null : Math.round(x.alt)]),
       hi: top("hi", 1), lo: top("lo", -1), rain: top("rain", 1).filter(x => x[3] > 0)
     }));
   }
@@ -587,6 +587,35 @@ async function main() {
     status.seen.radarFrames = radarFrames.frames.length;
   } catch (e) { fail("雷達動畫", e); }
   await writeFile(OUT + "/radar.json", JSON.stringify(radarFrames));
+
+  // ---------- 地形高度（溫度圖用：山區依高度變涼、加上地形明暗）。只做一次，之後沿用網站上的檔案 ----------
+  try {
+    let dem = null;
+    if (site) { try { const r = await fetch(site + "data/dem.json", { signal: AbortSignal.timeout(30000) }); if (r.ok) { const j = await r.json(); if (j && j.v === 2) dem = j; } } catch (e) {} }
+    if (!dem && libs.png) {
+      const Z = 10, N = 256 * 2 ** Z, G = { v: 2, lon0: 119.3, lat0: 21.85, res: 0.008, X: 350, Y: 438 };
+      const gx = lon => (lon + 180) / 360 * N, gy = lat => { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * N; };
+      const tiles = new Map(), need = new Set();
+      const x0 = Math.floor(gx(G.lon0) / 256), x1 = Math.floor(gx(G.lon0 + G.X * G.res) / 256), y0 = Math.floor(gy(G.lat0 + G.Y * G.res) / 256), y1 = Math.floor(gy(G.lat0) / 256);
+      for (let tx = x0; tx <= x1; tx++) for (let ty = y0; ty <= y1; ty++) need.add(tx + "/" + ty);
+      await Promise.all([...need].map(async k => {
+        const [tx, ty] = k.split("/");
+        try { const r = await fetch(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${Z}/${tx}/${ty}.png`, { signal: AbortSignal.timeout(30000) }); if (r.ok) tiles.set(k, libs.png.PNG.sync.read(Buffer.from(await r.arrayBuffer()))); } catch (e) {}
+      }));
+      if (tiles.size >= need.size * 0.9) {
+        const el = (px, py) => { const t = tiles.get(Math.floor(px / 256) + "/" + Math.floor(py / 256)); if (!t) return 0; const x = Math.floor(px) % 256, y = Math.floor(py) % 256, o = (y * 256 + x) * 4; return t.data[o] * 256 + t.data[o + 1] + t.data[o + 2] / 256 - 32768; };
+        const out = new Int16Array(G.X * G.Y);
+        for (let j = 0; j < G.Y; j++) for (let i = 0; i < G.X; i++) {
+          const lon = G.lon0 + (i + 0.5) * G.res, lat = G.lat0 + (j + 0.5) * G.res, px = gx(lon), py = gy(lat);
+          const a = el(px, py), b = el(px + 1, py), c = el(px, py + 1), d = el(px + 1, py + 1), fx = px % 1, fy = py % 1;
+          out[j * G.X + i] = Math.max(-1, Math.round(a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy));
+        }
+        dem = { ...G, d: Buffer.from(out.buffer).toString("base64") };
+        status.seen.demBuilt = { tiles: tiles.size, max: Math.max(...out) };
+      } else status.seen.demBuilt = { tiles: tiles.size, need: need.size };
+    }
+    if (dem) await writeFile(OUT + "/dem.json", JSON.stringify(dem));
+  } catch (e) { fail("地形高度", e); }
 
   // ---------- 全臺預報圖層：鄉鎮邊界＋逐 3 小時預報 ----------
   try {
