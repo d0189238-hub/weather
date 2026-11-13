@@ -367,10 +367,18 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .rleg span { display: inline-flex; align-items: center; gap: 3px; }
 .rleg i { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
 .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 4px 0 8px; }
-.chip { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px; border: 1.5px solid var(--line); border-radius: 12px; background: none; color: var(--ink); font: inherit; cursor: pointer; min-width: 0; }
+/* 首頁四格：實心底色＋左側狀態色條＋右上箭頭，按下會變深 */
+.chip { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px 10px 8px; border: 1.5px solid transparent; border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 9%, var(--paper)); color: var(--ink); font: inherit; cursor: pointer; min-width: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,.18); transition: background-color .15s, transform .1s; -webkit-tap-highlight-color: transparent; }
+.chip::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--tone, var(--line)); }
+.chip::after { content: "›"; position: absolute; top: 3px; right: 7px; font-size: 15px; line-height: 1; color: var(--muted); }
+.chip[data-panel]::after { content: "▾"; font-size: 10px; top: 6px; }
+.chip[data-panel].on::after { content: "▴"; }
+.chip:active { background: color-mix(in srgb, var(--ink) 18%, var(--paper)); transform: scale(.97); }
 .chip .ck { font-size: 12px; color: var(--muted); }
-.chip b { font-family: var(--display); font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.chip.on { border-color: var(--ink); }
+.chip b { font-family: var(--display); font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: var(--tone-t, var(--ink)); }
+.chip.on { border-color: var(--ink); background: color-mix(in srgb, var(--ink) 14%, var(--paper)); }
 .hpanel[hidden] { display: none; }
 .hero-say { margin: 6px 0 0; font-size: 17px; font-weight: 600; }
 .hero-say[hidden] { display: none; }
@@ -1396,7 +1404,7 @@ function setOtab(t, scroll) {
     if (t !== "sky" && SM) drawSmall();
     if (t === "temp" && OB && OB.obs) drawTempNow(OB.obs).catch(() => {});
     if (t === "rain" && OB && OB.obs) drawRainNow(OB.obs).catch(() => {});
-    if (t === "sky") { TYMAPS.forEach(m => m.invalidateSize()); drawTyMaps(); }
+    if (t === "sky") { TYMAPS.forEach(m => m._fit ? m._fit() : m.invalidateSize()); drawTyMaps(); }
   });
 }
 $("otabs").addEventListener("click", e => { const b = e.target.closest("[data-t]"); if (b) setOtab(b.dataset.t, true); });
@@ -1415,6 +1423,20 @@ function renderRainPanel() {
   $("pr-bars").innerHTML = hs.map(h => `<div class="${h.prob >= 50 ? "w" : ""}"><b>${h.prob}%</b><i style="height:${Math.max(3, h.prob)}%"></i><span>${lab(h)}</span></div>`).join("");
 }
 document.addEventListener("click", e => { const c = e.target.closest(".pclose"); if (!c) return; c.closest(".hpanel").hidden = true; $("chips").querySelectorAll(".chip").forEach(x => x.classList.remove("on")); });
+/* 四格的狀態色：空氣跟 AQI、帶傘下雨變藍、穿著跟體感冷暖、觀測有颱風地震閃電變紅 */
+function paintChips() {
+  const set = (id, c, txt) => { const b = $(id).closest(".chip"); if (c) { b.style.setProperty("--tone", c); } else b.style.removeProperty("--tone"); if (txt) b.style.setProperty("--tone-t", txt); else b.style.removeProperty("--tone-t"); };
+  const v = parseInt(($("aqi").textContent || "").trim(), 10);
+  set("c-aqi", isNaN(v) ? null : aqiLevel(v).color);
+  const r = ($("c-rain").textContent || "").trim();
+  set("c-rain", r === "—" || r === "不用" ? null : r === "折傘" ? "color-mix(in srgb, var(--rain) 55%, var(--line))" : "var(--rain)", r !== "—" && r !== "不用" && r !== "折傘" ? "var(--rain)" : null);
+  let f = null;
+  try { const ps = current && current.hours && periods(current.hours); if (ps && ps.length) f = ps[Math.min(tab, ps.length - 1)].feels; } catch (e) {}
+  set("c-wear", f == null ? null : `hsl(${hue(f)} 65% var(--tl))`);
+  const ty = $("sky-dot") && !$("sky-dot").hidden, eq = $("eq-home") && !$("eq-home").hidden, lt = /閃電/.test($("c-obs").textContent), alert = ty || eq || lt;
+  if (!lt) $("c-obs").textContent = eq ? "有地震" : ty ? "颱風" : "雷達";
+  set("c-obs", alert ? "var(--bad)" : null, alert ? "var(--bad)" : null);
+}
 function renderChips() {
   const t = id => ($(id) && $(id).textContent || "").trim();
   $("c-aqi").textContent = t("aqi") && t("aqi") !== "—" ? t("aqi") + " " + t("aqi-lv") : "—";
@@ -1423,6 +1445,7 @@ function renderChips() {
   renderRainPanel();
   const lh = t("light-home");
   $("c-obs").textContent = /閃電/.test(lh) && !/沒有/.test(lh) ? "有閃電" : "雷達";
+  paintChips();
   const rb = $("rb"), say = $("hero-say");
   say.hidden = rb.hidden; if (!rb.hidden) say.textContent = t("rb-h");
 }
@@ -1960,8 +1983,13 @@ async function drawTyMaps() {
     const all = t.past.concat(t.fc).map(p => [p.lat, p.lon]);
     if (h) all.push([h.lat, h.lon]);
     all.push([21.9, 120.0], [25.3, 122.0]);
-    m.fitBounds(L.latLngBounds(all), { padding: [24, 24] });
-    setTimeout(() => m.invalidateSize(), 60);
+    // 分頁還沒打開時地圖大小是 0，這時對位會落在外海、放到最大而一片黑；等真的有大小再對位，使用者自己動過就不再搶
+    const bounds = L.latLngBounds(all);
+    ["pointerdown", "touchstart", "wheel"].forEach(ev => box.addEventListener(ev, () => { m._moved = true; }, { passive: true }));
+    m._fit = () => { if (!box.offsetWidth || !box.offsetHeight) return; m.invalidateSize(); if (!m._moved) m.fitBounds(bounds, { padding: [24, 24], animate: false }); };
+    m.fitBounds(bounds, { padding: [24, 24] });
+    if (window.ResizeObserver) { m._ro = new ResizeObserver(() => m._fit()); m._ro.observe(box); }
+    setTimeout(m._fit, 60);
   });
 }
 const EQC = l => l >= 7 ? ["#4a148c", "#fff"] : l >= 6.5 ? ["#6a1b9a", "#fff"] : l >= 6 ? ["#9c27b0", "#fff"] : l >= 5.5 ? ["#c62828", "#fff"] : l >= 5 ? ["#e0412b", "#fff"] : l >= 4 ? ["#f08a24", "#1c2a33"] : l >= 3 ? ["#f6c142", "#1c2a33"] : l >= 2 ? ["#f2e86d", "#1c2a33"] : l >= 1 ? ["#c7e9c0", "#1c2a33"] : ["var(--cloth)", "var(--muted)"];
@@ -1999,9 +2027,9 @@ function drawTyEq() {
       <ol class="ty-list"><li class="hd"><span>時間</span><span>強度</span><b>離你</b></li>${rows}</ol></div>`;
   });
   $("ty-home").innerHTML = homeTy; $("ty-home").hidden = !homeTy;
-  TYMAPS.forEach(m => m.remove()); TYMAPS = [];
+  TYMAPS.forEach(m => { if (m._ro) m._ro.disconnect(); m.remove(); }); TYMAPS = [];
   $("o-ty").hidden = !obsTy; $("ty-body").innerHTML = obsTy;
-  $("sky-dot").hidden = !obsTy;
+  $("sky-dot").hidden = !obsTy; paintChips();
   if (obsTy && $("app").dataset.view === "obs") drawTyMaps();
   // 地震
   const qs = EQ && EQ.list || [];
@@ -2016,7 +2044,7 @@ function drawTyEq() {
       homeEq = (l < 4 ? `<button type="button" class="eq-x" data-eqkey="${eqKey}" aria-label="關閉地震資訊">×</button>` : "") + `<div class="tap eq-card" role="button" tabindex="0" data-go="obs"><span class="eq-int" style="background:${bg};color:${fg}"><b>${eqTxt(hv.v).replace(" 級", "")}</b><small>級</small></span><div class="ty-txt"><span class="muted">地震・${twWhen(t).replace(/ (\d+) 點$/, "")} ${hm(latest.time)}</span><b>${shortLoc(latest.loc)}　規模 ${latest.mag}</b><span class="muted">你這裡震度 ${eqTxt(hv.v)}（${hv.how}），深 ${latest.depth} 公里</span></div></div>`;
     }
   }
-  $("eq-home").innerHTML = homeEq ? `<div class="eqw">${homeEq}</div>` : ""; $("eq-home").hidden = !homeEq;
+  $("eq-home").innerHTML = homeEq ? `<div class="eqw">${homeEq}</div>` : ""; $("eq-home").hidden = !homeEq; paintChips();
   const x = $("eq-home").querySelector(".eq-x");
   if (x) x.onclick = e => { e.stopPropagation(); store.set("eqDismiss", x.dataset.eqkey); $("eq-home").hidden = true; };
   $("o-eq").hidden = !qs.length;
