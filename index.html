@@ -343,6 +343,14 @@ main { touch-action: pan-y; }
 .sm-isl { display: flex; gap: 10px; font-size: 13px; color: var(--muted); align-self: flex-start; }
 .sm-isl i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--line); }
 #o-sm[hidden] { display: none; }
+.rb[hidden] { display: none; }
+.rb-h { margin: 6px 0 2px; font-family: "Noto Sans TC", sans-serif; font-weight: 900; font-size: 21px; line-height: 1.35; }
+.rb-why { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
+.rb-d { margin: 10px 0 2px; font-weight: 700; font-size: 15px; border-left: 4px solid var(--ink); padding-left: 8px; }
+.rb-s { margin: 0; padding: 4px 0 4px 12px; font-size: 15px; border-left: 2px solid var(--line); display: flex; gap: 10px; }
+.rb-s span { flex: 0 0 5.5em; color: var(--muted); }
+.rb-s.wet { border-left-color: #4f9fe2; }
+.rb-s.wet span { color: #4f9fe2; }
 .sm-grid > .tmc { grid-column: 1 / -1; }
 .tmc { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .tmf { margin: 0; }
@@ -597,6 +605,12 @@ main { touch-action: pan-y; }
     </div>
     <div class="ld-bar" id="ld-bar" aria-hidden="true"></div>
     <div class="ld-ax" id="ld-ax" aria-hidden="true"></div>
+  </section>
+  <section class="rb" id="rb" hidden>
+    <h2>降雨重點</h2>
+    <p class="rb-h" id="rb-h"></p>
+    <p class="rb-why" id="rb-why"></p>
+    <div class="rb-tl" id="rb-tl"></div>
   </section>
 
   <section class="v-home">
@@ -1020,6 +1034,44 @@ function dryPlan(hours, nowMin, sun) {
   }
   return res;
 }
+/* 降雨重點：接下來 2 天有一波雨時，依時段整理（上半天、下午～傍晚、晚上、深夜） */
+let BRIEFJ = null;
+fetch("data/brief.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).then(j => { BRIEFJ = j; if (typeof current !== "undefined" && current && !current.sample) renderRainBrief(current); }).catch(() => {});
+function renderRainBrief(d) {
+  const box = $("rb"); if (!box) return;
+  const rows = (d && d.hours) || [], now = Date.now();
+  const SEG = [[0, 6, "深夜到清晨"], [6, 12, "上半天"], [12, 18, "下午到傍晚"], [18, 24, "晚上"]];
+  const twd = ms => new Date(ms + 8 * 3600e3), todayMs = Math.floor((now + 8 * 3600e3) / 864e5) * 864e5;
+  const segs = [];
+  for (const r of rows) {
+    if (r.day > 2) continue;
+    const si = SEG.findIndex(z => r.h >= z[0] && r.h < z[1]), key = r.day + "|" + si;
+    let g = segs.find(x => x.key === key); if (!g) { g = { key, day: r.day, si, ms: todayMs + r.day * 864e5 - 8 * 3600e3 + 12 * 3600e3, pop: 0, thunder: false }; segs.push(g); }
+    g.pop = Math.max(g.pop, r.prob ?? 0); if (/雷/.test(r.text || "")) g.thunder = true;
+  }
+  const first = segs.findIndex(g => g.pop >= 50);
+  if (first < 0) { box.hidden = true; return; }
+  let last = first; while (last + 1 < segs.length && segs[last + 1].pop >= 40) last++;
+  const from = Math.max(0, first - 1), to = Math.min(segs.length - 1, last + 1), peak = segs.slice(first, last + 1).reduce((a, b) => b.pop > a.pop ? b : a);
+  const WKN = ["日", "一", "二", "三", "四", "五", "六"];
+  const dl = g => { const t = twd(g.ms), a = g.day; return (a === 0 ? "今天" : a === 1 ? "明天" : "週" + WKN[t.getUTCDay()]) + `(${t.getUTCDate()}日)`; };
+  const thunder = segs.slice(first, last + 1).some(g => g.thunder), pl = places[active], nm = pl ? pl.t : "";
+  $("rb-h").textContent = `${dl(segs[first])}${SEG[segs[first].si][2]}起，${nm}${thunder ? "有雷雨" : "有一波雨"}`;
+  const ahead = segs[first].day;
+  const why = BRIEFJ && BRIEFJ.why ? (ahead <= 0 ? BRIEFJ.why.今天 : ahead === 1 ? BRIEFJ.why.明天 : null) : null;
+  $("rb-why").textContent = why ? "氣象署：" + why : ""; $("rb-why").hidden = !why;
+  let html = "", lastDay = null;
+  segs.slice(from, to + 1).forEach((g, n) => {
+    const idx = from + n;
+    if (g.day !== lastDay) { html += `<p class="rb-d">${dl(g)}</p>`; lastDay = g.day; }
+    const t = g.pop >= 50 ? (g === peak ? `降雨機率 ${g.pop}%，雨勢最明顯` : `降雨機率 ${g.pop}%，有雨`) + (g.thunder ? "，可能伴隨雷電" : "")
+      : idx > last ? (g.pop >= 30 ? `雨勢減緩，仍可能有短暫雨（${g.pop}%）` : `雨停，轉為多雲（${g.pop}%）`)
+      : g.pop >= 30 ? `雲量增加，可能有短暫雨（${g.pop}%）` : `天氣尚穩定（${g.pop}%）`;
+    html += `<p class="rb-s${g.pop >= 50 ? " wet" : ""}"><span>${SEG[g.si][2]}</span>${t}</p>`;
+  });
+  $("rb-tl").innerHTML = html;
+  box.hidden = false;
+}
 function renderLaundry(d) {
   const r = dryPlan(d.hours, d.nowMin, d.sun);
   $("ld-ic").innerHTML = gi("laundry");
@@ -1114,7 +1166,7 @@ function render(d) {
     vy.className = df <= -1 ? "cold" : df >= 1 ? "warm" : "";
     vy.innerHTML = df <= -1 ? `・比昨天冷 <b>${-df}°</b>` : df >= 1 ? `・比昨天暖 <b>${df}°</b>` : "・跟昨天差不多";
   }
-  renderLaundry(d);
+  renderLaundry(d); renderRainBrief(d);
   setWx(c);
   $("precip").textContent = c.precip + " mm";
   $("hum").textContent = c.hum == null ? "—" : Math.round(c.hum) + "%";

@@ -588,6 +588,26 @@ async function main() {
   } catch (e) { fail("雷達動畫", e); }
   await writeFile(OUT + "/radar.json", JSON.stringify(radarFrames));
 
+  // ---------- 氣象署「全臺天氣小幫手」：標題與天氣系統（東北季風、鋒面…），首頁與推播用 ----------
+  const BRIEF = { sent: null, title: null, why: { 今天: null, 明天: null } };
+  if (CWA) {
+    try {
+      const j = await fileapi("F-C0032-031"), u = findUrl(j, /^https?:\/\/\S+$/i);
+      const r = await fetch(u, { signal: AbortSignal.timeout(20000) });
+      let txt = new TextDecoder("big5").decode(Buffer.from(await r.arrayBuffer()));
+      txt = txt.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\s+/g, "");
+      const KEY = /東北季風|冷空氣|冷氣團|寒流|鋒面|華南雲雨區|颱風|熱帶性低氣壓|低壓|西南氣流|西南風|南風|東風|太平洋高壓|高壓|輻射冷卻|熱對流|水氣/;
+      const para = w => { const m = txt.match(new RegExp(w + "（\\d+日）(.*?)(?=今天（|今晚|明天（|後天（|離島天氣|根據|$)")); return m ? m[1] : ""; };
+      const pick = p => { const cl = p.split(/[，；。]/).filter(c => KEY.test(c) && !/溫度方面|高溫|低溫/.test(c)).map(c => c.replace(/^環境/, "")).slice(0, 2); return cl.length ? cl.join("、") : null; };
+      const t0 = pick(para("今天")), t1 = pick(para("明天"));
+      BRIEF.why = { 今天: t0 || t1, 明天: t1 || t0 };
+      const tm = txt.match(/【([^】]{2,40})】/); BRIEF.title = tm ? tm[1] : null;
+      const sm = txt.match(/發布時間：(\d+)年(\d+)月(\d+)日(\d+)時/); if (sm) BRIEF.sent = `${+sm[1] + 1911}-${sm[2].padStart(2, "0")}-${sm[3].padStart(2, "0")}T${sm[4].padStart(2, "0")}:00:00+08:00`;
+      status.seen.brief = BRIEF;
+    } catch (e) { status.seen.brief = "讀取失敗 " + String(e.message || e).slice(0, 80); }
+  }
+  await writeFile(OUT + "/brief.json", JSON.stringify(BRIEF));
+
   // ---------- 地形高度（溫度圖用：山區依高度變涼、加上地形明暗）。只做一次，之後沿用網站上的檔案 ----------
   try {
     let dem = null;
@@ -912,21 +932,7 @@ async function main() {
       const dayName = (date, ahead) => { const wd = new Date(date + "T00:00:00Z").getUTCDay(); return ahead === 0 ? "今日" : ahead === 1 ? "明日" : ahead === 2 ? "後天" : ((ahead >= 7 || (wd !== 0 && wd <= twNow.getUTCDay()) || (twNow.getUTCDay() === 0 && wd !== 0)) ? "下週" : "週") + WK[wd]; };
       const ahead = d => Math.round((Date.parse(d) - Date.parse(todayStr)) / 864e5);
       // 原因：從氣象署「全臺天氣小幫手」裡挑出講天氣系統的句子（東北季風、冷空氣、鋒面…）
-      const whyOf = { 今天: null, 明天: null };
-      if (digestMode || preview) {
-        try {
-          const j = await fileapi("F-C0032-031"), u = findUrl(j, /^https?:\/\/\S+$/i);
-          const r = await fetch(u, { signal: AbortSignal.timeout(20000) });
-          let txt = new TextDecoder("big5").decode(Buffer.from(await r.arrayBuffer()));
-          txt = txt.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\s+/g, "");
-          const KEY = /東北季風|冷空氣|冷氣團|寒流|鋒面|華南雲雨區|颱風|熱帶性低氣壓|低壓|西南氣流|西南風|南風|東風|太平洋高壓|高壓|輻射冷卻|熱對流|水氣/;
-          const para = w => { const m = txt.match(new RegExp(w + "（\\d+日）(.*?)(?=今天（|今晚|明天（|後天（|離島天氣|根據|$)")); return m ? m[1] : ""; };
-          const pick = p => { const cl = p.split(/[，；。]/).filter(c => KEY.test(c) && !/溫度方面|高溫|低溫/.test(c)).map(c => c.replace(/^環境/, "")).slice(0, 2); return cl.length ? cl.join("、") : null; };
-          const t0 = pick(para("今天")), t1 = pick(para("明天"));
-          whyOf.今天 = t0 || t1; whyOf.明天 = t1 || t0;
-          status.seen.digestWhy = whyOf;
-        } catch (e) { status.seen.digestWhy = "讀取失敗 " + String(e.message || e).slice(0, 80); }
-      }
+      const whyOf = { ...BRIEF.why };
       const placesOf = s => (s.places || []).slice(0, 4).map(p => ({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, T: townData[p.c + "|" + p.t] })).filter(x => x.T && x.T.w && x.T.w.length);
       const coldMonth = () => { const m = twNow.getUTCMonth() + 1; return m >= 10 || m <= 4; };
       // 整理成「事實」：明天會不會下雨、最近的雨天、轉涼的日子、很熱的日子
