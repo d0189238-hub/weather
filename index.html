@@ -352,21 +352,27 @@ main { touch-action: pan-y; }
 .rb-s.wet { border-left-color: #4f9fe2; }
 .rb-s.wet span { color: #4f9fe2; }
 .sm-grid > .tmc { grid-column: 1 / -1; }
-.tmc { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tmc { display: block; }
+.tmdays { display: flex; gap: 8px; margin-bottom: 4px; font-family: "Noto Sans TC", sans-serif; }
+.tmdays button { border: 1.5px solid var(--line); background: none; color: var(--muted); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 14px; font-weight: 700; }
+.tmdays button.on { border-color: var(--ink); color: var(--ink); }
+.tmdays small { font-size: 11px; font-weight: 500; }
 .tmf { margin: 0; }
 .tmf figcaption { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; font-family: "Noto Sans TC", sans-serif; }
 .tmf figcaption .d { border: 1.5px solid var(--ink); border-radius: 999px; padding: 2px 9px; font-size: 14px; font-weight: 700; }
 .tmf figcaption .d small { font-size: 10px; font-weight: 500; }
 .tmf figcaption .h { background: var(--ink); color: var(--paper); border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; }
-.tmw { padding: 14px 27% 0 17%; }
+.tmw { padding: 16px 20% 0; }
 #temp-map .tmw { padding: 16px 16% 0; }
 .tmi { position: relative; }
 .tmi canvas { width: 100%; display: block; }
 .tml { position: absolute; transform: translate(-100%, -50%); margin-left: -3px; display: flex; align-items: center; gap: 1px; font-family: "Noto Sans TC", sans-serif; font-size: 9.5px; line-height: 1; white-space: nowrap; pointer-events: none; }
 .tml.r { transform: translate(0, -50%); margin-left: 3px; }
-.tml b { border: 1px solid rgba(255,255,255,.9); color: #fff; background: rgba(20,24,32,.55); border-radius: 999px; padding: 1px 4px; font-weight: 700; }
-.tml span { background: rgba(120,124,132,.85); color: #fff; border-radius: 999px; padding: 2px 4px; font-weight: 700; }
-.tml.me b { background: #fff; color: #1b1f27; }
+.tml { border: 1.5px solid rgba(255,255,255,.9); border-radius: 999px; padding: 2px 8px 2px 7px; gap: 4px !important; background: rgba(15,18,26,.25); color: #fff; align-items: baseline !important; }
+.tml small { font-size: 11px; font-weight: 500; opacity: .9; }
+.tml b { font-size: 17px; font-weight: 700; font-family: var(--display), "Noto Sans TC", sans-serif; letter-spacing: -.02em; }
+
+
 .tml em { font-style: normal; font-weight: 700; font-size: 9.5px; padding: 2px 3px; border-radius: 999px; color: #fff; }
 .tml, .tml.r { margin-left: 0; }
 .tml span i { font-style: normal; margin-left: 3px; padding: 0 3px; border-radius: 999px; }
@@ -374,7 +380,7 @@ main { touch-action: pan-y; }
 .tmlines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .tmlines line { stroke: rgba(255,255,255,.75); stroke-width: .7; }
 .tmlines circle { fill: #fff; stroke: #1b1f27; stroke-width: .6; }
-#temp-map .tml { font-size: 13px; }
+#temp-map .tml b { font-size: 19px; }
 .tmh { margin: 4px 0 0; font-family: "Noto Sans TC", sans-serif; font-weight: 900; font-size: 24px; line-height: 1.3; }
 .tmh u { text-decoration: none; background: linear-gradient(transparent 62%, rgba(226,72,86,.85) 62%); padding: 0 2px; }
 .tmh u.c { background: linear-gradient(transparent 62%, rgba(80,150,230,.85) 62%); }
@@ -2470,7 +2476,7 @@ function tmapLabels(wrap, M, labels) {
   const items = labels.map(L => {
     const [x, y] = M.P([L.lon, L.lat]), right = L.lon > 121.05, el = document.createElement("div");
     el.className = "tml" + (L.me ? " me" : "") + (right ? " r" : "");
-    el.innerHTML = `<b>${L.name}</b><span>${L.v}°${L.delta != null && Math.round(L.delta) !== 0 ? `<i class="${L.delta > 0 ? "up" : "dn"}">${L.delta > 0 ? "+" : "−"}${Math.abs(Math.round(L.delta))}</i>` : ""}</span>`;
+    el.innerHTML = `<small>${L.name}</small><b>${L.v}°</b>`;
     wrap.appendChild(el);
     return { el, x, y, ly: y, right };
   });
@@ -2510,16 +2516,19 @@ async function drawTempCompare(box) {
   const WKN = ["日", "一", "二", "三", "四", "五", "六"], dayLab = ms => { const t = tw(ms); return `週${WKN[t.getUTCDay()]}<small>(${t.getUTCDate()}日)</small>`; };
   const mine = places.slice(0, 4).map(p => ({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, c: p.c, t: p.t, me: true }));
   const cities = TMAP_CITIES.map(([n, c, t]) => ({ name: n, c, t })).filter(x => !mine.some(m => m.c === x.c && m.t === x.t));
-  box.innerHTML = `<div class="tmc">${two.map((p, n) => `<figure class="tmf"><figcaption><span class="d">${dayLab(p[1])}</span><span class="h">中午</span></figcaption><div class="tmw"><div class="tmi"><canvas></canvas></div></div></figure>`).join("")}</div>`;
+  if (!(SM.tday < two.length)) SM.tday = 0;
+  box.innerHTML = `<div class="tmc"><div class="tmdays">${two.map((p, n) => `<button type="button" data-n="${n}" class="${n === SM.tday ? "on" : ""}">${dayLab(p[1])} 中午</button>`).join("")}</div><figure class="tmf"><div class="tmw"><div class="tmi"><canvas></canvas></div></div></figure></div>`;
+  box.querySelectorAll(".tmdays button").forEach(b => b.onclick = () => { SM.tday = +b.dataset.n; drawTempCompare(box); });
   const vals = [];
-  box.querySelectorAll(".tmf").forEach((f, n) => {
-    const [i] = two[n], M = tmapDraw(f.querySelector("canvas"), ptsOf(i));
+  two.forEach((p, n) => {
+    const [i] = p;
+    const f = n === SM.tday ? box.querySelector(".tmf") : null, M = f ? tmapDraw(f.querySelector("canvas"), ptsOf(i)) : { P: () => [0, 0] };
     if (!M) return;
     const mk = x => { const co = TCO[x.c] && TCO[x.c][x.t], v = valAt(i, x.c, x.t); return co && v != null ? { ...x, lat: co[0], lon: co[1], v } : null; };
     const mineL = mine.map(mk).filter(Boolean), labs = cities.map(mk).filter(Boolean).filter(L => tmapFar(L.lat, L.lon, mineL)).concat(mineL);
     if (n === 1 && vals[0]) labs.forEach(L => { const a = vals[0].find(z => z.c === L.c && z.t === L.t); if (a) L.delta = L.v - a.v; });
     vals.push(labs);
-    tmapLabels(f.querySelector(".tmi"), M, labs);
+    if (f) tmapLabels(f.querySelector(".tmi"), M, labs);
   });
   // 大標題：兩天比較
   const hd = $("sm-head");
@@ -2587,7 +2596,7 @@ function drawSmall() {
   $("sm-head").hidden = true;
   if (TM) {
     $("sm-title").textContent = "未來氣溫"; $("sm-me").hidden = true; $("o-sm").hidden = false;
-    $("sm-cap").textContent = "接下來兩天中午的氣溫，依氣象署鄉鎮預報並按地形高度推算山區溫度；紅、藍小字是跟前一天比的升降溫。";
+    $("sm-cap").textContent = "按上方日期切換。依氣象署鄉鎮預報，並按地形高度推算山區溫度。";
     drawTempCompare(box).catch(() => {});
     return;
   }

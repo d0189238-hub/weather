@@ -976,8 +976,8 @@ async function main() {
         const lines = [`${dn(segs[first].day)}${SEG[segs[first].si][2]}起${th ? "有雷雨" : "有雨"}`];
         let lastDay = null;
         segs.slice(Math.max(0, first - 1), Math.min(segs.length, last + 2)).forEach((g, n, arr) => {
-          const i = segs.indexOf(g), lab = (g.day !== lastDay && lastDay ? dn(g.day).replace(/\(.*/, "") : "") + SEG[g.si][2]; lastDay = g.day;
-          const t = i < first ? "天氣尚可" : i > last ? "雨勢減緩" : g === peak ? `雨勢最明顯 ${g.pop}%` + (g.th ? "，可能打雷" : "") : `有雨 ${g.pop}%`;
+          const i = segs.indexOf(g), lab = (g.day !== lastDay && lastDay ? (ahead(g.day) === 1 ? "明天" : dayName(g.day, ahead(g.day))) : "") + SEG[g.si][2]; lastDay = g.day;
+          const t = i < first ? "天氣尚可" : i > last ? "雨勢減緩" : g === peak ? "雨勢最明顯" + (g.th ? "，可能打雷" : "") : "有雨";
           lines.push(`▎${lab}：${t}`);
         });
         return lines;
