@@ -441,6 +441,8 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .pr-bars b { font-family: var(--display); font-weight: 600; font-size: 14px; }
 .next-sun { margin-bottom: 6px; }
 
+.qcwa { margin: 10px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted); } .qlv { margin-left: 8px; font-size: 14px; font-weight: 700; color: var(--bad); white-space: nowrap; }
+.qcwa b { color: var(--ink); font-weight: 600; }
 .rleg { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 12px; color: var(--muted); }
 .rleg span { display: inline-flex; align-items: center; gap: 3px; }
 .rleg i { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
@@ -485,6 +487,7 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 .tmdays { display: flex; gap: 8px; margin-bottom: 4px; font-family: var(--body); }
 .tmdays button { border: 1.5px solid var(--line); background: none; color: var(--muted); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 14px; font-weight: 700; }
 .tmdays button.on { border-color: var(--ink); color: var(--ink); }
+.rdays { flex-wrap: wrap; gap: 6px; } .rdays button { font-size: 13px; padding: 4px 10px; }
 .tmdays small { font-size: 11px; font-weight: 500; }
 .tmf { margin: 0; }
 .tmf figcaption { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; font-family: var(--body); }
@@ -2667,6 +2670,9 @@ function tmapDraw(cv, pts, opts = {}) {
   const P = p => [(p[0] - TDOM.lon0) * k * sx, (TDOM.lat1 - p[1]) * sx];
   // 1. 把各點換成「海平面溫度」，在粗格子上內插（雨量不做高度修正）
   const RAIN = opts.mode === "rain", lapse = RAIN ? 0 : LAPSE;
+  // opts.at：直接給每個位置的數值（例如預報格點），不用從測站內插
+  let t0At = opts.at;
+  if (!t0At) {
   const S = pts.filter(p => p[2] != null).map(p => [p[0], p[1], p[2] + lapse * (p[3] != null ? p[3] : demAt(p[0], p[1]))]);
   if (!S.length) return null;
   const CR = 0.03, CX = Math.ceil((TDOM.lon1 - TDOM.lon0) / CR) + 2, CY = Math.ceil((TDOM.lat1 - TDOM.lat0) / CR) + 2, C0 = new Float32Array(CX * CY);
@@ -2676,7 +2682,8 @@ function tmapDraw(cv, pts, opts = {}) {
     let a = 0, b = 0; for (const [d, v] of near) { const w = 1 / (d + 2e-4); a += w * v; b += w; }
     C0[j * CX + i] = a / b;
   }
-  const t0At = (lat, lon) => { const x = (lon - TDOM.lon0) / CR, y = (lat - TDOM.lat0) / CR, i = Math.max(0, Math.min(CX - 2, Math.floor(x))), j = Math.max(0, Math.min(CY - 2, Math.floor(y))), fx = Math.min(1, Math.max(0, x - i)), fy = Math.min(1, Math.max(0, y - j)), o = j * CX + i; return C0[o] * (1 - fx) * (1 - fy) + C0[o + 1] * fx * (1 - fy) + C0[o + CX] * (1 - fx) * fy + C0[o + CX + 1] * fx * fy; };
+  t0At = (lat, lon) => { const x = (lon - TDOM.lon0) / CR, y = (lat - TDOM.lat0) / CR, i = Math.max(0, Math.min(CX - 2, Math.floor(x))), j = Math.max(0, Math.min(CY - 2, Math.floor(y))), fx = Math.min(1, Math.max(0, x - i)), fy = Math.min(1, Math.max(0, y - j)), o = j * CX + i; return C0[o] * (1 - fx) * (1 - fy) + C0[o + 1] * fx * (1 - fy) + C0[o + CX] * (1 - fx) * fy + C0[o + CX + 1] * fx * fy; };
+  }
   const tAt = (lat, lon) => t0At(lat, lon) - lapse * demAt(lat, lon);
   // 2. 每個畫面像素：溫度顏色 × 地形明暗（光從西北來）
   const PW = cv.width, PH = cv.height, img = c.createImageData(PW, PH), d = img.data;
@@ -2832,8 +2839,8 @@ async function drawTempNow(O) {
 }
 /* 雨量預報：氣象署每 12 小時累積雨量（毫米），色階 index 1..17 對應 0.5、1、2、5、10、15、20、30、40、50、70、90、110、130、150、200、300 */
 const QPF_LO = [0, 0.5, 1, 2, 5, 10, 15, 20, 30, 40, 50, 70, 90, 110, 130, 150, 200, 300], QPF_HI = [0.5, 1, 2, 5, 10, 15, 20, 30, 40, 50, 70, 90, 110, 130, 150, 200, 300, 400];
-// 跟氣象署雨量圖同一套直覺：藍＝小雨，綠黃＝明顯的雨，橘紅紫＝大雨
-const QPF_SHOW = [[0.5, [170, 228, 255]], [2, [70, 190, 255]], [5, [30, 135, 255]], [10, [25, 85, 225]], [20, [40, 190, 80]], [40, [255, 210, 0]], [70, [255, 125, 0]], [130, [225, 35, 30]], [200, [180, 20, 170]]];
+// 跟氣象署雨量圖同一套色序（藍→綠→黃→橘→紅→紫），但降低飽和度，看起來比較柔和
+const QPF_SHOW = [[0.5, [174, 215, 235]], [2, [106, 178, 218]], [5, [79, 140, 211]], [10, [70, 106, 190]], [20, [74, 169, 99]], [40, [206, 180, 58]], [70, [206, 131, 58]], [130, [188, 79, 76]], [200, [161, 57, 154]]];
 const qpfRGB = c => { if (!c) return null; const mm = QPF_LO[c]; let col = null; for (const [v, k] of QPF_SHOW) if (mm >= v) col = k; return col; };
 const qpfCol = c => { const k = qpfRGB(c); return k ? `rgb(${k})` : null; };
 // 溫度：連續色階，冷＝藍、舒服＝淡、熱＝橘紅
@@ -2858,6 +2865,26 @@ const twH = ms => {
   const short = { 今天早上: "今早", 今天晚上: "今晚", 明天早上: "明早", 明天晚上: "明晚" }[day] || day;
   return short + " " + (h > 12 ? h - 12 : h) + " 點";
 };
+// 未來雨量：一次一張大圖，跟今日累積雨量一樣有地形、縣市標籤與你的地點
+async function drawRainFc(box) {
+  const Q = SM.qpf; await Promise.all([loadDem(), loadTownCoords()]);
+  const per = Q.periods.slice(0, 4);
+  if (!(SM.rday < per.length)) SM.rday = 0;
+  const lab = p => twH(Date.parse(p.from)).replace(/ \d+ 點$/, "") + " → " + twH(Date.parse(p.to)).replace(/ \d+ 點$/, "");
+  const P0 = per[SM.rday];
+  box.innerHTML = `<div class="tmc"><div class="tmdays rdays">${per.map((p, n) => `<button type="button" data-n="${n}" class="${n === SM.rday ? "on" : ""}">${lab(p)}</button>`).join("")}</div><figure class="tmf smf" data-img="data/${P0.img}"><div class="tmw"><div class="tmi"><canvas></canvas></div></div><div class="sm-isl" data-n="0"></div></figure></div>`;
+  box.querySelectorAll(".rdays button").forEach(b => b.onclick = e => { e.stopPropagation(); SM.rday = +b.dataset.n; drawRainFc(box); });
+  const cell = (lat, lon) => { const gx = Math.floor((lon - Q.lon0) / Q.res), gy = Math.floor((lat - Q.lat0) / Q.res); return gx < 0 || gy < 0 || gx >= Q.X || gy >= Q.Y ? 0 : P0.cells[gy * Q.X + gx] || 0; };
+  const M = tmapDraw(box.querySelector("canvas"), [], { mode: "rain", at: (lat, lon) => QPF_LO[cell(lat, lon)] });
+  if (!M) return;
+  const txt = c => !c ? "0" : QPF_HI[c] <= 1 ? "<1" : QPF_LO[c] + "–" + QPF_HI[c];
+  const labs = [];
+  places.slice(0, 4).forEach(p => { const co = TCO[p.c] && TCO[p.c][p.t]; if (co) labs.push({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, lat: co[0], lon: co[1], v: txt(qpfAt(Q, P0, co[0], co[1]) || 0), u: "", me: true }); });
+  TMAP_CITIES.forEach(([n, c, t]) => { const co = TCO[c] && TCO[c][t]; if (co && tmapFar(co[0], co[1], labs)) labs.push({ name: n, lat: co[0], lon: co[1], v: txt(qpfAt(Q, P0, co[0], co[1]) || 0), u: "" }); });
+  tmapLabels(box.querySelector(".tmi"), M, labs);
+  if (here) { const c = qpfAt(Q, P0, here.lat, here.lon) || 0, rgb = qpfRGB(c), pl0 = places[active] ? pname(places[active]).replace(/^(.{2,3}[縣市])/, "") : "你這裡";
+    box.querySelector(".sm-isl").innerHTML = `<span class="mine"><i style="background:${rgb ? `rgb(${rgb})` : "transparent"}"></i>${pl0}　${c ? (QPF_LO[c] < 1 ? "不到 " + QPF_HI[c] : QPF_LO[c] + "～" + QPF_HI[c]) + " 毫米" : "不會下雨"}</span>`; }
+}
 function drawSmall() {
   if (!SM) return;
   const box = $("sm-grid"), fc = SM.fc, Q = smKind === "rain" ? SM.qpf : null, TM = smKind === "temp";
@@ -2871,7 +2898,9 @@ function drawSmall() {
   }
   const idx = Q ? Q.periods.map((p, i) => i).slice(0, 4) : [0, 2, 4, 6].filter(i => i < fc.times.length);
   $("sm-title").textContent = Q ? "未來 48 小時雨量" : TM ? "未來 24 小時氣溫" : "未來 24 小時";
-  $("sm-cap").textContent = Q ? "12 小時累積雨量・白點是你的地點・點圖看原圖" : TM ? "每 6 小時一張・白點是你的地點" : "每 6 小時一張・氣象署鄉鎮預報";
+  $("sm-cap").textContent = Q ? "12 小時累積雨量（毫米）・點圖看原圖" : TM ? "每 6 小時一張・白點是你的地點" : "每 6 小時一張・氣象署鄉鎮預報";
+  if (Q) drawRainFc(box).catch(() => {});
+  else {
   const lo0 = 119.95, lo1 = 122.05, la0 = 21.87, la1 = 25.33, k = Math.cos(23.6 * Math.PI / 180);
   const bw = box.clientWidth || ($("app").clientWidth - 40) || 340, cw = Math.max(120, Math.floor((bw - 10) / 2)), ch = Math.round(cw * (la1 - la0) / ((lo1 - lo0) * k));
   const dpr = Math.min(3, window.devicePixelRatio || 1), sx = cw / (lo1 - lo0), sy = ch / (la1 - la0);
@@ -2934,16 +2963,22 @@ function drawSmall() {
     if (TM && pl) { const v = fc.towns[pl.c + "|" + pl.t], tv = v && v[i] ? v[i][2] : null, rgb = tRGB(tv); mine = tv == null ? "" : `<span class="mine"><i style="background:rgb(${rgb})"></i>${pl0}　${Math.round(tv)}°</span>`; }
     box.querySelector(`.sm-isl[data-n="${n}"]`).innerHTML = Q || TM ? mine : isl;
   });
+  }
   // 你的地點：48 小時大約會下多少
   const me = $("sm-me");
   me.hidden = !(Q && here);
   if (Q && here) {
     let lo = 0, hi = 0, parts = [];
     Q.periods.slice(0, 4).forEach(p => { const c = qpfAt(Q, p, here.lat, here.lon) || 0; lo += QPF_LO[c]; hi += c ? QPF_HI[c] : 0; parts.push(c); });
-    const nm = pl ? pname(pl) : "你的地點";
-    me.innerHTML = hi < 0.5 ? `<b>${nm}</b>　未來 48 小時預計不會下雨` : `<b>${nm}</b>　未來 48 小時預計累積 <em>${lo < 1 ? "不到 " + Math.ceil(hi) : Math.round(lo) + "～" + Math.round(hi)}</em> 毫米`;
+    const pl1 = places[active], nm = pl1 ? pname(pl1) : "你的地點";
+    // 任兩段相連的 12 小時加起來就是 24 小時累積，拿來對照氣象署分級
+    const LV = [[500, "超大豪雨"], [350, "大豪雨"], [200, "豪雨"], [80, "大雨"]];
+    let lo24 = 0, hi24 = 0; for (let n = 0; n + 1 < parts.length; n++) { lo24 = Math.max(lo24, QPF_LO[parts[n]] + QPF_LO[parts[n + 1]]); hi24 = Math.max(hi24, (parts[n] ? QPF_HI[parts[n]] : 0) + (parts[n + 1] ? QPF_HI[parts[n + 1]] : 0)); }
+    const sure = LV.find(([v]) => lo24 >= v), may = LV.find(([v]) => hi24 >= v);
+    const lvTxt = sure ? `<span class="qlv">達${sure[1]}等級</span>` : may ? `<span class="qlv">可能達${may[1]}等級</span>` : "";
+    me.innerHTML = (hi < 0.5 ? `<b>${nm}</b>　未來 48 小時預計不會下雨` : `<b>${nm}</b>　未來 48 小時預計累積 <em>${lo < 1 ? "不到 " + Math.ceil(hi) : Math.round(lo) + "～" + Math.round(hi)}</em> 毫米`) + lvTxt;
   }
-  $("sm-legend").innerHTML = TM ? `<div class="tbar" style="background:linear-gradient(90deg,${TSHOW.map(([v, c]) => `rgb(${c}) ${(v - 4) / 31 * 100}%`).join(",")})"></div><div class="tnums">${[5, 10, 15, 20, 25, 30, 35].map(v => `<span style="left:${(v - 4) / 31 * 100}%">${v}°</span>`).join("")}</div><div class="qwords tw"><span>冷</span><span>涼</span><span>舒服</span><span>熱</span></div>` : Q ? `<div class="qbar">${QPF_SHOW.map(([v, c]) => `<span><i style="background:rgb(${c})"></i>${v}</span>`).join("")}</div><div class="qwords"><span>小雨</span><span>中雨</span><span>大雨</span><span>豪雨</span></div>` : smKind === "wx"
+  $("sm-legend").innerHTML = TM ? `<div class="tbar" style="background:linear-gradient(90deg,${TSHOW.map(([v, c]) => `rgb(${c}) ${(v - 4) / 31 * 100}%`).join(",")})"></div><div class="tnums">${[5, 10, 15, 20, 25, 30, 35].map(v => `<span style="left:${(v - 4) / 31 * 100}%">${v}°</span>`).join("")}</div><div class="qwords tw"><span>冷</span><span>涼</span><span>舒服</span><span>熱</span></div>` : Q ? `<div class="qbar">${QPF_SHOW.map(([v, c]) => `<span><i style="background:rgb(${c})"></i>${v}</span>`).join("")}</div><p class="qcwa">上圖是每 12 小時累積雨量。氣象署分級以 24 小時累積雨量計：<b>大雨</b> 80、<b>豪雨</b> 200、<b>大豪雨</b> 350、<b>超大豪雨</b> 500 毫米以上</p>` : smKind === "wx"
     ? Object.entries(WXCOL).map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join("")
     : smKind === "pop" ? [[20, "20%"], [30, "30%"], [40, "40%"], [60, "60%"], [80, "80%+"]].map(([p, l]) => `<span><i style="background:${POPCOL(p)}"></i>${l}</span>`).join("")
     : [[5, "5°"], [10, "10°"], [15, "15°"], [20, "20°"], [25, "25°"], [30, "30°"], [35, "35°"]].map(([t, l]) => `<span><i style="background:${smTempCol(t)}"></i>${l}</span>`).join("");
