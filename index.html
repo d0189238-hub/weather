@@ -441,6 +441,7 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .pr-bars b { font-family: var(--display); font-weight: 600; font-size: 14px; }
 .next-sun { margin-bottom: 6px; }
 
+.rleg2 { margin-top: 10px; }
 .qcwa { margin: 10px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted); } .qlv { margin-left: 8px; font-size: 14px; font-weight: 700; color: var(--bad); white-space: nowrap; }
 .qcwa b { color: var(--ink); font-weight: 600; }
 .rleg { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 12px; color: var(--muted); }
@@ -529,10 +530,10 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 .smf[data-img] { cursor: zoom-in; }
 .smf figcaption.rng { font-size: 14px; padding: 2px 9px; }
 .sm-isl .mine { font-size: 14px; color: var(--ink); }
-#sm-legend .qbar { display: flex; width: 100%; gap: 0; }
-#sm-legend .qbar span { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; font-size: 12px; color: var(--muted); }
-#sm-legend .qbar i { width: 100%; height: 9px; border-radius: 0; margin: 0; }
-#sm-legend .qbar span:first-child i { border-radius: 5px 0 0 5px; } #sm-legend .qbar span:last-child i { border-radius: 0 5px 5px 0; }
+#sm-legend .qbar, .rleg2 .qbar { display: flex; width: 100%; gap: 0; }
+#sm-legend .qbar span, .rleg2 .qbar span { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; font-size: 12px; color: var(--muted); }
+#sm-legend .qbar i, .rleg2 .qbar i { width: 100%; height: 9px; border-radius: 0; margin: 0; }
+#sm-legend .qbar span:first-child i, .rleg2 .qbar span:first-child i { border-radius: 5px 0 0 5px; } #sm-legend .qbar span:last-child i, .rleg2 .qbar span:last-child i { border-radius: 0 5px 5px 0; }
 #sm-legend .qwords { display: grid; grid-template-columns: 4fr 1fr 2fr 2fr; width: 100%; font-size: 12px; color: var(--muted); }
 #sm-legend .tbar { width: 100%; height: 10px; border-radius: 5px; }
 #sm-legend .tnums { position: relative; width: 100%; height: 16px; font-size: 12px; color: var(--muted); }
@@ -2816,7 +2817,8 @@ async function drawRainNow(O) {
   places.slice(0, 4).forEach(p => { const co = TCO[p.c] && TCO[p.c][p.t]; if (co) labs.push({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, lat: co[0], lon: co[1], v: mm(near(co[0], co[1])), u: "", me: true }); });
   TMAP_CITIES.forEach(([n, c, t]) => { const co = TCO[c] && TCO[c][t]; if (co && tmapFar(co[0], co[1], labs)) labs.push({ name: n, lat: co[0], lon: co[1], v: mm(near(co[0], co[1])), u: "" }); });
   tmapLabels(box.querySelector(".tmi"), M, labs);
-  box.insertAdjacentHTML("beforeend", `<div class="rleg">${QPF_SHOW.map(([v, c]) => `<span><i style="background:rgb(${c})"></i>${v}</span>`).join("")}<span class="muted">毫米</span></div>`);
+  // 圖例跟「未來 48 小時雨量」同一個樣式
+  box.insertAdjacentHTML("beforeend", `<div class="rleg2"><div class="qbar">${QPF_SHOW.map(([v, c]) => `<span><i style="background:rgb(${c})"></i>${v}</span>`).join("")}</div><p class="qcwa">今天 0 點起的累積雨量（毫米）。氣象署分級以 24 小時累積雨量計：<b>大雨</b> 80、<b>豪雨</b> 200、<b>大豪雨</b> 350、<b>超大豪雨</b> 500 毫米以上</p></div>`);
   return true;
 }
 // 觀測：現在的溫度
