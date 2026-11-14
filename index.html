@@ -593,6 +593,7 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 .uvg-n { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 16px; line-height: 1.6; }
 .uvg-n span { white-space: nowrap; } .uvg-n b { font-weight: 600; margin-left: 4px; font-variant-numeric: tabular-nums; }
 .uvg-n .me { font-weight: 700; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--muted); }
+#o-uv .uvbig, #o-uv .uvg { cursor: pointer; } #o-uv .uvg:active { filter: brightness(1.12); }
 .uvg-more { margin-top: 8px; padding: 4px 0; border: 0; background: none; color: var(--rain); font: inherit; font-size: 14px; cursor: pointer; }
 .uvbig { margin-top: 2px; } .uvbig > span { font-size: 18px; }
 #uv-cap { display: block; margin: 2px 0 10px; } #uv-cap b { color: var(--ink); font-weight: 700; }
@@ -2365,6 +2366,13 @@ function setImg(key, m) {
   $(key + "-img").src = src; $(key + "-link").href = src;
 }
 let uvOpen = false;
+// 點紫外線大數字或測站卡片，開氣象署的紫外線觀測頁（原圖）
+const UV_SRC = "https://www.cwa.gov.tw/V8/C/W/OBS_UVI.html";
+document.addEventListener("click", e => {
+  const t = e.target;
+  if (t.closest(".uvg-more, a") || !t.closest("#o-uv .uvbig, #o-uv .uvg")) return;
+  window.open(UV_SRC, "_blank", "noopener");
+});
 function drawObs() {
   if (!OB) return;
   const M = OB.maps, L = OB.light, O = OB.obs;
@@ -2440,7 +2448,7 @@ function drawObs() {
       const lv = UVL(best[3]);
       $("uv-now").textContent = best[3];
       $("uv-lv").innerHTML = `<span class="uvk" style="background:${lv[1]}"></span>${lv[0]}級`;
-      $("uv-cap").innerHTML = `離你最近的 <b>${String(best[0]).replace(/[<&]/g, "")}</b> 站・約 ${Math.round(bd)} 公里・${twTime(O.time)} 觀測`;
+      $("uv-cap").innerHTML = `離你最近的 <b>${String(best[0]).replace(/[<&]/g, "")}</b> 站・約 ${Math.round(bd)} 公里・${twTime(O.time)} 觀測・<a href="${UV_SRC}" target="_blank" rel="noopener">原圖</a>`;
     } else { $("uv-now").textContent = ""; $("uv-lv").textContent = ""; $("uv-cap").textContent = twTime(O.time) + " 觀測"; }
     // 依等級分組：高的在上，同一級的測站排成一行；最低那一級超過 8 站就先收起來
     const grp = new Map();
