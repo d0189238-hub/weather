@@ -1663,7 +1663,7 @@ function fromData(T, D) {
   rows.forEach((x, i) => { if (x.ms <= nowMs) start = i; });
   const hours = rows.slice(start, start + 48).map(x => {
     const h = new Date(x.ms + 8 * 3600e3).getUTCHours(), day = twDay(x.ms) - today, isDay = isDayAt(h);
-    return { day, h, isDay, temp: x.r[1], feels: x.r[2] == null ? x.r[1] : x.r[2], prob: x.r[3] == null ? 0 : x.r[3], code: wxCode(x.r[4]), text: x.r[5], uv: isDay ? uvOf(day + today) : 0, rh: x.r[6], ws: x.r[7] };
+    return { day, h, isDay, temp: x.r[1], feels: x.r[2] == null ? x.r[1] : x.r[2], af: x.r[2], prob: x.r[3] == null ? 0 : x.r[3], code: wxCode(x.r[4]), text: x.r[5], uv: isDay ? uvOf(day + today) : 0, rh: x.r[6], ws: x.r[7] };
   });
   if (!hours.length || !week.length) throw new Error("no forecast");
   const h0 = hours[0], o = T.o, a = T.a, nowDay = nowMin >= sun.rise && nowMin < sun.set;
@@ -1684,7 +1684,8 @@ function fromData(T, D) {
     time: (D.updated || (o && o.time) || "").slice(11, 16),
     source: "資料來源：中央氣象署" + (o ? "（觀測站：" + o.station + (o.time ? "，" + o.time.slice(11, 16) + " 觀測" : "") + "）" : "") + (a ? "、環境部（測站：" + a.site + "）" : "") + "。每 10 分鐘更新；預報以氣象署發布為準。",
     cur: {
-      temp: o && o.temp != null ? o.temp : h0.temp, feels: o && o.temp != null && o.rh != null ? apparentT(o.temp, o.rh, o.ws) : h0.feels, hum: o ? o.rh : null, precip: o && o.rain != null ? o.rain : 0,
+      temp: o && o.temp != null ? o.temp : h0.temp, // 體感溫度以氣象署鄉鎮預報公布的數字為主（跟氣象署網站、App 一致）；沒有時才用觀測值自己算
+      feels: h0 && h0.af != null ? h0.af : o && o.temp != null && o.rh != null ? apparentT(o.temp, o.rh, o.ws) : h0.feels, hum: o ? o.rh : null, precip: o && o.rain != null ? o.rain : 0,
       wind: o ? o.ws : null, wdir: o ? o.wd : null, code: h0.code, desc: h0.text, isDay: nowDay, uv: nowDay ? uvOf(today) : 0
     },
     hi: week[0].hi, lo: week[0].lo, week, hours, past, yday: y24 ? y24[1] : null,
