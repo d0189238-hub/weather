@@ -130,6 +130,9 @@
 @keyframes bgrain { to { transform: translate(-28px, 180px); } }
 @keyframes bgtwinkle { from { opacity: .3; } to { opacity: .55; } }
 :root.bg-paused #bg i { animation-play-state: paused; }
+/* 觀測頁的雨絲更淡，而且越往下越淡，不干擾測站數字（只在觀測頁生效） */
+#bg .b-rw { position: absolute; inset: 0; }
+:root:has(main[data-view="obs"]) #bg .b-rw { opacity: .45; -webkit-mask-image: linear-gradient(#000 0, #000 25%, transparent 80%); mask-image: linear-gradient(#000 0, #000 25%, transparent 80%); }
 @media (prefers-reduced-motion: reduce) { #bg i { animation: none !important; } :root { transition: none; } }
 html, body { height: 100%; }
 body {
@@ -390,6 +393,12 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .otabs { position: sticky; top: 58px; z-index: 20; display: flex; gap: 6px; padding: 10px 0; margin-bottom: 4px; background: var(--paper, #121726); }
 .otabs button { flex: 1; position: relative; border: 1.5px solid var(--line); background: none; color: var(--muted); border-radius: 999px; padding: 8px 0; font: inherit; font-size: 17px; }
 .otabs button.on { border-color: var(--ink); color: var(--ink); font-weight: 700; }
+/* 頂部標題列與分頁列：底色延伸到螢幕兩側，跟背景頂端同色，捲動時不會出現一塊沒貼齊的深色方塊 */
+.top.v-sub, .otabs { background: none !important; isolation: isolate; }
+.top.v-sub::before, .otabs::before { content: ""; position: absolute; z-index: -1; top: 0; bottom: 0; left: 50%; width: 100vw; transform: translateX(-50%);
+  background: var(--bg1); }
+.otabs::before { top: -1px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
+html { overflow-x: clip; }
 .otabs i { position: absolute; top: 6px; right: 18%; width: 8px; height: 8px; border-radius: 50%; background: #e2484f; }
 .zoom { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 20; background: #000; overflow: hidden; touch-action: none; }
 .zoom[hidden] { display: none; }
@@ -573,8 +582,13 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 .uvbig { display: flex; align-items: baseline; gap: var(--s2); }
 .uvbig b { font-family: var(--display); font-size: var(--t3); line-height: 1; font-weight: 500; }
 .uvgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
-.uvgrid div { display: flex; justify-content: space-between; gap: 6px; padding: 6px 10px; border-radius: 6px; background: var(--cloth); font-size: 16px; }
-.uvgrid b { font-weight: 600; }
+/* 紫外線卡片：沉穩的深灰藍、統一高度，名稱太長會縮成「…」，數字固定靠右 */
+.uvgrid div { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border-radius: 10px; background: color-mix(in srgb, var(--cloth) 55%, var(--paper)); font-size: 16px; }
+.uvgrid div > span { display: flex; align-items: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uvgrid .uvk { flex: none; }
+.uvgrid b { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+.uvbig { margin-top: 2px; } .uvbig > span { font-size: 18px; }
+#uv-cap { display: block; margin: 2px 0 10px; } #uv-cap b { color: var(--ink); font-weight: 700; }
 .uvk { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
 .rank { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
 .rank li { display: grid; grid-template-columns: 32px 1fr auto; align-items: baseline; gap: 12px; padding: 10px 0; }
@@ -705,7 +719,7 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 </style>
 </head>
 <body>
-<div id="bg" aria-hidden="true"><i class="b-glow"></i><i class="b-cloud"></i><i class="b-rain"></i><i class="b-star"></i></div>
+<div id="bg" aria-hidden="true"><i class="b-glow"></i><i class="b-cloud"></i><span class="b-rw"><i class="b-rain"></i></span><i class="b-star"></i></div>
 <main id="app" data-view="home">
   <div class="top v-home">
     <button type="button" id="place-btn" aria-haspopup="dialog"><span id="place-name"></span><svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -2418,7 +2432,7 @@ function drawObs() {
       const lv = UVL(best[3]);
       $("uv-now").textContent = best[3];
       $("uv-lv").innerHTML = `<span class="uvk" style="background:${lv[1]}"></span>${lv[0]}`;
-      $("uv-cap").textContent = `離你最近的 ${best[0]} 站，約 ${Math.round(bd)} 公里・${twTime(O.time)} 觀測`;
+      $("uv-cap").innerHTML = `離你最近的 <b>${String(best[0]).replace(/[<&]/g, "")}</b> 站・約 ${Math.round(bd)} 公里・${twTime(O.time)} 觀測`;
     } else { $("uv-now").textContent = ""; $("uv-lv").textContent = ""; $("uv-cap").textContent = twTime(O.time) + " 觀測"; }
     $("uv-grid").innerHTML = uv.slice().sort((a, b) => b[3] - a[3]).map(u => `<div><span><span class="uvk" style="background:${UVL(u[3])[1]}"></span>${u[0]}</span><b>${u[3]}</b></div>`).join("");
   }
