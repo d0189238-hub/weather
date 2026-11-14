@@ -181,7 +181,10 @@ const km = (a, b, c, d) => {
 };
 function nearest(list, lat, lon, county, town) {
   if (lat === null || lon === null || !list.length) return null;
-  const pools = [list.filter(s => s.county === county && s.town === town), list.filter(s => s.county === county), list];
+  // 國道、快速道路上的測站（例如「國三S175K」）架在高架路段，風特別大、路面又熱，不代表一般生活環境：同一範圍有其他測站就不用它
+  const road = s => /^(國[一二三五六八十0-9]|台[0-9]|快速|國道)/.test(String(s.station || ""));
+  const prefer = arr => { const ok = arr.filter(s => !road(s)); return ok.length ? ok : arr; };
+  const pools = [prefer(list.filter(s => s.county === county && s.town === town)), prefer(list.filter(s => s.county === county)), prefer(list)];
   for (const pool of pools) {
     let best = null, bd = Infinity;
     for (const s of pool) { const d = km(lat, lon, s.lat, s.lon); if (d < bd) { bd = d; best = s; } }
