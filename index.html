@@ -214,6 +214,15 @@ svg.ic .wet { stroke: var(--rain); }
 .pick small { display: block; font-size: 14px; color: var(--muted); font-weight: 400; }
 .pick .t { font-family: var(--display); font-size: var(--t1); font-weight: 600; }
 .padd { display: flex; flex-direction: column; gap: var(--s1); }
+/* 地點面板：段落標題加圖示、目前顯示的地點整列亮起、按鈕加圖示 */
+.psec { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; font-size: 20px; font-weight: 600; color: var(--ink); }
+.psec svg { flex: none; color: var(--muted); }
+#push-box .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+#push-box .pnote { font-size: 13px; line-height: 1.6; }
+.plist { border-top: 0; border-radius: 14px; overflow: hidden; background: var(--card); }
+.prow { background: transparent; border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
+.prow:last-child { border-bottom: 0; }
+.prow.on { background: color-mix(in srgb, var(--ink) 9%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 28%, transparent); border-radius: 14px; }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s1); }
 .pair select {
   font: inherit; min-width: 0; padding: 8px; border-radius: 6px;
@@ -1003,10 +1012,10 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
       <button type="button" class="btn ghost" id="p-close">關閉</button>
     </div>
     <div class="plist" id="p-list"></div>
-    <p class="phint" id="p-hint">按住左邊的 ≡ 上下拖，可以調整順序；左右滑的順序跟這裡一樣。</p>
+    <p class="phint" id="p-hint">按住 ≡ 拖曳調整順序，左右滑也照這個順序</p>
     <button type="button" class="btn ghost" id="p-edit">編輯清單</button>
     <div class="padd">
-      <span class="muted">新增地點</span>
+      <h3 class="psec"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 21s-6.5-6.2-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 14.8 12 21 12 21z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="9.8" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>新增地點</h3>
       <div class="pair">
         <select id="a-county" aria-label="縣市"></select>
         <select id="a-town" aria-label="鄉鎮市區"></select>
@@ -1014,16 +1023,16 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
       <button type="button" class="btn" id="a-ok">加入並查看</button>
     </div>
     <div class="padd" id="push-box">
-      <span class="muted">下雨通知</span>
+      <h3 class="psec"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15zM10 20.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>下雨通知</h3>
       <p id="push-msg"></p>
       <button type="button" class="btn" id="push-on" hidden>開啟下雨通知</button>
-      <div class="pair"><button type="button" class="btn ghost" id="push-test" hidden>測試通知</button><button type="button" class="btn ghost" id="push-off" hidden>關閉通知</button></div>
+      <div class="pair"><button type="button" class="btn ghost" id="push-test" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M8 5.5v13l10-6.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>測試通知</button><button type="button" class="btn ghost" id="push-off" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M8.5 5.6A6 6 0 0 1 18 11v4M6 11v5.5L4.5 18H17M10 20.5a2 2 0 0 0 4 0M3.5 3.5l17 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>關閉通知</button></div>
       <div id="push-code-box" hidden>
         <textarea id="push-code" readonly rows="4" aria-label="個人訂閱碼"></textarea>
         <button type="button" class="btn" id="push-copy">複製訂閱碼</button>
         <p class="phint">把這段訂閱碼存進 GitHub 的 PUSH_SUB。不要貼給別人。</p>
       </div>
-      <p class="phint">開啟通知時，會把這支手機的通知位址和你選的鄉鎮存到登記處，只用來發下雨提醒；按「關閉通知」就會刪除。</p>
+      <p class="phint pnote">開啟後，這支手機的通知位址和你選的鄉鎮會存到登記處，只用來發下雨提醒；關閉通知就會刪除。</p>
     </div>
   </div>
 </div>
@@ -1791,7 +1800,7 @@ function renderPlaces() {
   $("p-hint").hidden = places.length < 2;
   $("p-list").innerHTML = places.map((p, i) => {
     const s = sample(COUNTY[p.c].lat, seedOf(pname(p))).cur;
-    return `<div class="prow"><span class="grip" data-g="${i}" role="button" aria-label="拖曳調整 ${pname(p)} 的順序"><svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><button type="button" class="pick" data-i="${i}">${icon(s.code, s.isDay)}` +
+    return `<div class="prow${i === active ? " on" : ""}"><span class="grip" data-g="${i}" role="button" aria-label="拖曳調整 ${pname(p)} 的順序"><svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><button type="button" class="pick" data-i="${i}">${icon(s.code, s.isDay)}` +
       `<b>${pname(p)}${i === active ? "<small>目前顯示</small>" : ""}</b><span class="t" id="pt-${i}">${Math.round(s.temp)}°</span></button>` +
       `<button type="button" class="btn ghost" data-d="${i}"${editing && places.length > 1 ? "" : " hidden"}>移除</button></div>`;
   }).join("");
