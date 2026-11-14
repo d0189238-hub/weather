@@ -581,12 +581,15 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 .thumb .lines { display: flex; flex-direction: column; gap: 6px; }
 .uvbig { display: flex; align-items: baseline; gap: var(--s2); }
 .uvbig b { font-family: var(--display); font-size: var(--t3); line-height: 1; font-weight: 500; }
-.uvgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
-/* 紫外線卡片：沉穩的深灰藍、統一高度，名稱太長會縮成「…」，數字固定靠右 */
-.uvgrid div { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border-radius: 10px; background: color-mix(in srgb, var(--cloth) 55%, var(--paper)); font-size: 16px; }
-.uvgrid div > span { display: flex; align-items: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.uvgrid .uvk { flex: none; }
-.uvgrid b { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+.uvgrid { display: flex; flex-direction: column; gap: 10px; }
+/* 紫外線依等級分組的卡片 */
+.uvg { padding: 12px 16px 14px; border-radius: 16px; background: color-mix(in srgb, var(--cloth) 55%, var(--paper)); }
+.uvg-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 700; font-size: 16px; }
+.uvg-h span { display: flex; align-items: center; } .uvg-h small { font-size: 13px; font-weight: 400; color: var(--muted); }
+.uvg-n { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 16px; line-height: 1.6; }
+.uvg-n span { white-space: nowrap; } .uvg-n b { font-weight: 600; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.uvg-n .me { font-weight: 700; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--muted); }
+.uvg-more { margin-top: 8px; padding: 4px 0; border: 0; background: none; color: var(--rain); font: inherit; font-size: 14px; cursor: pointer; }
 .uvbig { margin-top: 2px; } .uvbig > span { font-size: 18px; }
 #uv-cap { display: block; margin: 2px 0 10px; } #uv-cap b { color: var(--ink); font-weight: 700; }
 .uvk { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
@@ -2357,6 +2360,7 @@ function setImg(key, m) {
   const src = "data/" + m.file + "?t=" + encodeURIComponent(m.time || "");
   $(key + "-img").src = src; $(key + "-link").href = src;
 }
+let uvOpen = false;
 function drawObs() {
   if (!OB) return;
   const M = OB.maps, L = OB.light, O = OB.obs;
@@ -2431,10 +2435,23 @@ function drawObs() {
     if (best) {
       const lv = UVL(best[3]);
       $("uv-now").textContent = best[3];
-      $("uv-lv").innerHTML = `<span class="uvk" style="background:${lv[1]}"></span>${lv[0]}`;
+      $("uv-lv").innerHTML = `<span class="uvk" style="background:${lv[1]}"></span>${lv[0]}級`;
       $("uv-cap").innerHTML = `離你最近的 <b>${String(best[0]).replace(/[<&]/g, "")}</b> 站・約 ${Math.round(bd)} 公里・${twTime(O.time)} 觀測`;
     } else { $("uv-now").textContent = ""; $("uv-lv").textContent = ""; $("uv-cap").textContent = twTime(O.time) + " 觀測"; }
-    $("uv-grid").innerHTML = uv.slice().sort((a, b) => b[3] - a[3]).map(u => `<div><span><span class="uvk" style="background:${UVL(u[3])[1]}"></span>${u[0]}</span><b>${u[3]}</b></div>`).join("");
+    // 依等級分組：高的在上，同一級的測站排成一行；最低那一級超過 8 站就先收起來
+    const grp = new Map();
+    uv.slice().sort((a, b) => b[3] - a[3]).forEach(u => { const k = UVL(u[3])[0]; if (!grp.has(k)) grp.set(k, []); grp.get(k).push(u); });
+    const gs = [...grp.values()], esc = t => String(t).replace(/[<&]/g, "");
+    $("uv-grid").innerHTML = gs.map((list, gi) => {
+      const lv = UVL(list[0][3]), vs = list.map(u => u[3]), lo = Math.min(...vs), hi = Math.max(...vs);
+      const fold = gi === gs.length - 1 && gs.length > 1 && list.length > 8 && !uvOpen;
+      const shown = fold ? list.slice(0, 8) : list;
+      return `<div class="uvg"><div class="uvg-h"><span><span class="uvk" style="background:${lv[1]}"></span>${lv[0]}級</span><small>${list.length} 站・${lo === hi ? lo : lo + "–" + hi}</small></div>` +
+        `<div class="uvg-n">${shown.map(u => `<span${u === best ? ' class="me"' : ""}>${esc(u[0])}<b>${u[3]}</b></span>`).join("")}</div>` +
+        (fold ? `<button type="button" class="uvg-more">展開其餘 ${list.length - 8} 站 ▾</button>` : "") + `</div>`;
+    }).join("");
+    const more = $("uv-grid").querySelector(".uvg-more");
+    if (more) more.onclick = () => { uvOpen = true; drawObs(); };
   }
   // 排行榜：用分頁一次看一種
   const hasRank = O && (O.hi && O.hi.length || O.lo && O.lo.length);
