@@ -453,6 +453,10 @@ html { overflow-x: clip; }
 .rleg2 { margin-top: 10px; }
 .qcwa { margin: 10px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted); } .qlv { margin-left: 8px; font-size: 14px; font-weight: 700; color: var(--bad); white-space: nowrap; }
 .qcwa b { color: var(--ink); font-weight: 600; }
+/* 備註拆成短句，每句不拆開，避免只剩一兩個字掉到下一行 */
+.nw { white-space: nowrap; }
+.qcwa .qln { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qcwa .qlvs { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 2px; } .qcwa .qlvs span { white-space: nowrap; }
 .rleg { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 12px; color: var(--muted); }
 .rleg span { display: inline-flex; align-items: center; gap: 3px; }
 .rleg i { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
@@ -2849,7 +2853,7 @@ async function drawRainNow(O) {
   TMAP_CITIES.forEach(([n, c, t]) => { const co = TCO[c] && TCO[c][t]; if (co && tmapFar(co[0], co[1], labs)) labs.push({ name: n, lat: co[0], lon: co[1], v: mm(near(co[0], co[1])), u: "" }); });
   tmapLabels(box.querySelector(".tmi"), M, labs);
   // 圖例跟「未來 48 小時雨量」同一個樣式
-  box.insertAdjacentHTML("beforeend", `<div class="rleg2"><div class="qbar">${QPF_SHOW.map(([v, c]) => `<span><i style="background:rgb(${c})"></i>${v}</span>`).join("")}</div><p class="qcwa">今天 0 點起的累積雨量（毫米）。氣象署分級以 24 小時累積雨量計：<b>大雨</b> 80、<b>豪雨</b> 200、<b>大豪雨</b> 350、<b>超大豪雨</b> 500 毫米以上</p></div>`);
+  box.insertAdjacentHTML("beforeend", `<div class="rleg2"><div class="qbar">${QPF_SHOW.map(([v, c]) => `<span><i style="background:rgb(${c})"></i>${v}</span>`).join("")}</div><p class="qcwa"><span class="qln">今天 0 點起的累積雨量，單位毫米</span><span class="qln">氣象署分級（24 小時累積，毫米以上）</span><span class="qlvs"><span><b>大雨</b> 80</span><span><b>豪雨</b> 200</span><span><b>大豪雨</b> 350</span><span><b>超大豪雨</b> 500</span></span></p></div>`);
   return true;
 }
 // 觀測：現在的溫度
@@ -3009,9 +3013,9 @@ function drawSmall() {
     let lo24 = 0, hi24 = 0; for (let n = 0; n + 1 < parts.length; n++) { lo24 = Math.max(lo24, QPF_LO[parts[n]] + QPF_LO[parts[n + 1]]); hi24 = Math.max(hi24, (parts[n] ? QPF_HI[parts[n]] : 0) + (parts[n + 1] ? QPF_HI[parts[n + 1]] : 0)); }
     const sure = LV.find(([v]) => lo24 >= v), may = LV.find(([v]) => hi24 >= v);
     const lvTxt = sure ? `<span class="qlv">達${sure[1]}等級</span>` : may ? `<span class="qlv">可能達${may[1]}等級</span>` : "";
-    me.innerHTML = (hi < 0.5 ? `<b>${nm}</b>　未來 48 小時預計不會下雨` : `<b>${nm}</b>　未來 48 小時預計累積 <em>${lo < 1 ? "不到 " + Math.ceil(hi) : Math.round(lo) + "～" + Math.round(hi)}</em> 毫米`) + lvTxt;
+    me.innerHTML = (hi < 0.5 ? `<b>${nm}</b>　<span class="nw">未來 48 小時預計不會下雨</span>` : `<b>${nm}</b>　<span class="nw">未來 48 小時預計累積</span> <span class="nw"><em>${lo < 1 ? "不到 " + Math.ceil(hi) : Math.round(lo) + "～" + Math.round(hi)}</em> 毫米</span>`) + lvTxt;
   }
-  $("sm-legend").innerHTML = TM ? `<div class="tbar" style="background:linear-gradient(90deg,${TSHOW.map(([v, c]) => `rgb(${c}) ${(v - 4) / 31 * 100}%`).join(",")})"></div><div class="tnums">${[5, 10, 15, 20, 25, 30, 35].map(v => `<span style="left:${(v - 4) / 31 * 100}%">${v}°</span>`).join("")}</div><div class="qwords tw"><span>冷</span><span>涼</span><span>舒服</span><span>熱</span></div>` : Q ? `<div class="qbar">${QPF_SHOW.map(([v, c]) => `<span><i style="background:rgb(${c})"></i>${v}</span>`).join("")}</div><p class="qcwa">上圖是每 12 小時累積雨量。氣象署分級以 24 小時累積雨量計：<b>大雨</b> 80、<b>豪雨</b> 200、<b>大豪雨</b> 350、<b>超大豪雨</b> 500 毫米以上</p>` : smKind === "wx"
+  $("sm-legend").innerHTML = TM ? `<div class="tbar" style="background:linear-gradient(90deg,${TSHOW.map(([v, c]) => `rgb(${c}) ${(v - 4) / 31 * 100}%`).join(",")})"></div><div class="tnums">${[5, 10, 15, 20, 25, 30, 35].map(v => `<span style="left:${(v - 4) / 31 * 100}%">${v}°</span>`).join("")}</div><div class="qwords tw"><span>冷</span><span>涼</span><span>舒服</span><span>熱</span></div>` : Q ? `<div class="qbar">${QPF_SHOW.map(([v, c]) => `<span><i style="background:rgb(${c})"></i>${v}</span>`).join("")}</div><p class="qcwa"><span class="qln">上圖是每 12 小時累積雨量，單位毫米</span><span class="qln">氣象署分級（24 小時累積，毫米以上）</span><span class="qlvs"><span><b>大雨</b> 80</span><span><b>豪雨</b> 200</span><span><b>大豪雨</b> 350</span><span><b>超大豪雨</b> 500</span></span></p>` : smKind === "wx"
     ? Object.entries(WXCOL).map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join("")
     : smKind === "pop" ? [[20, "20%"], [30, "30%"], [40, "40%"], [60, "60%"], [80, "80%+"]].map(([p, l]) => `<span><i style="background:${POPCOL(p)}"></i>${l}</span>`).join("")
     : [[5, "5°"], [10, "10°"], [15, "15°"], [20, "20°"], [25, "25°"], [30, "30°"], [35, "35°"]].map(([t, l]) => `<span><i style="background:${smTempCol(t)}"></i>${l}</span>`).join("");
