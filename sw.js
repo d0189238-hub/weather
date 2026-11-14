@@ -13,7 +13,8 @@ self.addEventListener("fetch", e => {
   const key = req.mode === "navigate" ? scope : url.origin + url.pathname;
   e.respondWith((async () => {
     try {
-      const r = await fetch(req);
+      // 網頁本身一律跟伺服器確認是不是最新版，避免手機拿到舊的暫存
+      const r = await fetch(req, req.mode === "navigate" || /\/(index\.html)?$/.test(url.pathname) ? { cache: "no-cache" } : {});
       if (r.ok && r.type === "basic") { const c = await caches.open(CACHE); c.put(key, r.clone()); }
       return r;
     } catch (err) {

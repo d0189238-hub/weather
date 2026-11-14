@@ -3069,8 +3069,10 @@ async function checkVersion() {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
     if (!r.ok) return;
     const v = (await r.json()).v;
-    if (v && v !== BUILD && store.get("reloadedFor") !== v) {
-      store.set("reloadedFor", v);
+    // 同一版最多每 2 分鐘重試一次，避免第一次換新時拿到舊暫存就再也不換
+    const last = JSON.parse(store.get("reloadedFor2") || "{}");
+    if (v && v !== BUILD && !(last.v === v && Date.now() - last.t < 120e3)) {
+      store.set("reloadedFor2", JSON.stringify({ v, t: Date.now() }));
       location.replace(location.pathname + "?v=" + v.slice(0, 7) + location.hash);
     }
   } catch (e) {}
