@@ -221,6 +221,27 @@ svg.ic .wet { stroke: var(--rain); }
 /* 現在 */
 .hero { padding-top: 8px; }
 .laundry { padding-top: 4px; }
+/* 有框卡片：曬衣服、接下來、展開的面板，半透明底＋細亮框，背景會微微透出來 */
+#laundry, section.next, .hpanel {
+  background: var(--card); border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent); border-radius: 20px;
+  padding: 18px 18px 16px !important; margin: 0 0 14px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.10), inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+#laundry .ld { grid-template-columns: 56px 1px 1fr; gap: 16px; align-items: center; }
+#laundry .ld::before { content: ""; grid-column: 2; grid-row: 1; align-self: stretch; background: color-mix(in srgb, var(--ink) 22%, transparent); }
+/* 晴天：不加陰影，卡片用淡霧藍，只留細邊，維持極簡 */
+:root[data-bg="sun"] #laundry, :root[data-bg="sun"] section.next, :root[data-bg="sun"] .hpanel {
+  background: rgba(228,237,243,.62); box-shadow: none; border-color: rgba(41,55,70,.09); -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-bg="sun"] .chip { box-shadow: none; background: rgba(228,237,243,.62); }
+#laundry .ld-ic { grid-column: 1; grid-row: 1; } #laundry .ld-t { grid-column: 3; grid-row: 1; }
+#laundry .ld { grid-template-columns: 44px 1px 1fr; gap: 14px; }
+#laundry .ld-ic svg.gi { width: 44px; height: 44px; }
+#laundry .ld-t b { font-size: 23px; } #laundry .ld-t b em { font-size: 27px; }
+#laundry #ld-sub { font-size: 15px; }
+section.next .hscroll { margin: 0 -18px; padding: 4px 18px 8px; }
+section.next .next-sun .axis { font-size: 15px; gap: 6px; }
+section.next .swing { font-size: 22px; }
 .tyeq[hidden], #o-ty[hidden], #o-eq[hidden] { display: none; }
 .tyeq { padding: 4px 0 8px; }
 .tyeq .tap.ty-card, .tyeq .tap.eq-card { display: grid; text-align: left; justify-items: start; grid-template-columns: auto 1fr; gap: 14px; align-items: center; padding: 12px; border-radius: 10px; background: var(--card); border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent); }
@@ -411,11 +432,12 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .pclose { margin-left: auto; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
 .hpanel { background: var(--card); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border: 1.5px solid color-mix(in srgb, var(--ink) 14%, transparent); border-radius: 14px; padding: 14px 14px 16px !important; margin: 4px 0 8px; }
 .pr-say { margin: 0; font-size: 17px; font-weight: 600; }
-.pr-bars { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; height: 130px; margin-top: 6px; }
+.pr-bars { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: stretch; height: 104px; margin-top: 10px; }
 .pr-bars span { white-space: nowrap; font-size: 11px; }
 .pr-bars div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; font-size: 12px; color: var(--muted); }
-.pr-bars i { width: 70%; border-radius: 4px 4px 0 0; background: var(--line); min-height: 3px; }
-.pr-bars .w i { background: #4f9fe2; } .pr-bars .w b { color: var(--ink); }
+/* 每格都有一條淡色底軌，機率低時也不會留一大片空白 */
+.pr-bars i { flex: 1; width: 70%; border-radius: 4px; background: linear-gradient(to top, var(--fill, var(--muted)) var(--p), color-mix(in srgb, var(--ink) 9%, transparent) var(--p)); }
+.pr-bars .w i { --fill: #4f9fe2; } .pr-bars .w b { color: var(--ink); }
 .pr-bars b { font-family: var(--display); font-weight: 600; font-size: 14px; }
 .next-sun { margin-bottom: 6px; }
 
@@ -1479,7 +1501,7 @@ function renderRainPanel() {
   const wet = hs.filter(h => h.prob >= 50), first = wet[0], maxP = Math.max(...hs.map(h => h.prob));
   $("c-rain").textContent = first ? (hs.indexOf(first) === 0 ? "要帶" : lab(first) + "起") : maxP >= 30 ? "折傘" : "不用";
   $("pr-say").textContent = first ? `${hs.indexOf(first) === 0 ? "現在就可能下雨" : (first.day === 0 ? "今天 " : first.day === 1 ? "明天 " : "") + first.h + " 點起可能下雨"}，出門帶傘` : maxP >= 30 ? `可能有短暫雨（最高 ${maxP}%），帶把折傘比較保險` : "接下來 24 小時不太會下雨";
-  $("pr-bars").innerHTML = hs.map(h => `<div class="${h.prob >= 50 ? "w" : ""}"><b>${h.prob}%</b><i style="height:${Math.max(3, h.prob)}%"></i><span>${lab(h)}</span></div>`).join("");
+  $("pr-bars").innerHTML = hs.map(h => `<div class="${h.prob >= 50 ? "w" : ""}"><b>${h.prob}%</b><i style="--p:${Math.max(4, h.prob)}%"></i><span>${lab(h)}</span></div>`).join("");
 }
 document.addEventListener("click", e => { const c = e.target.closest(".pclose"); if (!c) return; c.closest(".hpanel").hidden = true; $("chips").querySelectorAll(".chip").forEach(x => x.classList.remove("on")); });
 /* 四格的狀態色：空氣跟 AQI、帶傘下雨變藍、穿著跟體感冷暖、觀測有颱風地震閃電變紅 */
