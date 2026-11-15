@@ -236,7 +236,14 @@ main, .panel-in { zoom: var(--uz); }
 /* 大、特大：首頁四格改成兩排兩格，字才放得下 */
 :root[data-fs]:not([data-fs="1"]) #chips { grid-template-columns: repeat(2, 1fr); }
 #fs-box .phint { margin-top: 4px; }
-#laundry .ld-t b, #laundry #ld-sub { text-wrap: balance; }
+/* 放大時：降雨長條 8 欄一定要擠在卡片內；曬衣服的大標題不再跟著放大，避免數字被拆到兩行 */
+.pr-bars { grid-template-columns: repeat(8, minmax(0, 1fr)) !important; }
+.pr-bars > div > * { max-width: 100%; white-space: nowrap; }
+:root[data-fs]:not([data-fs="1"]) .pr-bars b { font-size: 12px !important; letter-spacing: -0.03em; }
+:root[data-fs]:not([data-fs="1"]) .pr-bars span { font-size: 10.5px !important; letter-spacing: -0.04em; }
+#laundry #ld-sub, #laundry .ld-t b { text-wrap: pretty; }
+:root[data-fs]:not([data-fs="1"]) #laundry .ld-t b { font-size: calc(23px / var(--uz) * 1.08) !important; }
+:root[data-fs]:not([data-fs="1"]) #laundry .ld-t b em { font-size: calc(27px / var(--uz) * 1.08) !important; }
 .fsseg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .fsseg button { font: inherit; color: var(--ink); background: none; border: 1.5px solid var(--line); border-radius: 999px; padding: 8px 0; cursor: pointer; }
 .fsseg button:nth-child(2) { font-size: 1.12em; } .fsseg button:nth-child(3) { font-size: 1.25em; }
