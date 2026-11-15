@@ -2136,6 +2136,8 @@ function drawTyEq() {
   tys.forEach(t => {
     const c = tyTrack(t)[0]; if (!c) return;
     const cl = tyClosest(t, h), lv = tyLevel(c.wind);
+    // 颱風正在遠離（之後不會比現在更近）而且已在 500 公里外，就不顯示
+    if (cl && !(cl.ahead && cl.d < cl.now - 20) && cl.now > 500) return;
     const head = `<div class="ty-h"><b>${t.name}</b><span>${t.en ? t.en + "・" : ""}${lv}</span></div>`;
     let msg;
     if (!cl) msg = "";
