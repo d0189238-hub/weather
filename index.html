@@ -3102,7 +3102,7 @@ function setSat(layer) {
   showSat(SF.length - 1);
   const full = layer.full ? "data/" + layer.full.file + "?t=" + encodeURIComponent(layer.full.time) : "data/" + SF[SF.length - 1].file;
   $("sat-link").href = full;
-  $("sat-time").textContent = "最新 " + twTime(SF[SF.length - 1].time) + "・" + (satKind === "rgb" ? "晚上請看紅外線" : "越亮越紅，雲越高、雨越強");
+  $("sat-time").textContent = "最新 " + twTime(SF[SF.length - 1].time) + "・" + (satKind === "rgb" ? "真實色是可見光，晚上只看得到暗紅色的低雲，請看紅外線" : "紅外線日夜都看得到，越白的雲越高越厚");
 }
 $("s-play").addEventListener("click", () => {
   if (sTimer) { stopSat(); return; }
