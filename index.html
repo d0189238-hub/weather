@@ -2103,11 +2103,18 @@ async function drawTyMaps() {
     all.push([21.9, 120.0], [25.3, 122.0]);
     // 分頁還沒打開時地圖大小是 0，這時對位會落在外海、放到最大而一片黑；等真的有大小再對位，使用者自己動過就不再搶
     const bounds = L.latLngBounds(all);
-    ["pointerdown", "touchstart", "wheel"].forEach(ev => box.addEventListener(ev, () => { m._moved = true; }, { passive: true }));
+    // 只有使用者真的在地圖上拖曳、縮放才算「動過」；手指滑過地圖捲動頁面不算（以前這樣會讓地圖永遠停在外海）
+    m.on("dragstart", () => { m._moved = true; });
+    box.addEventListener("touchstart", e => { if (e.touches.length > 1) m._moved = true; }, { passive: true });
+    box.addEventListener("wheel", () => { m._moved = true; }, { passive: true });
+    box.querySelectorAll(".leaflet-control-zoom a").forEach(a => a.addEventListener("click", () => { m._moved = true; }));
     m._fit = () => { if (!box.offsetWidth || !box.offsetHeight) return; m.invalidateSize(); if (!m._moved) m.fitBounds(bounds, { padding: [24, 24], animate: false }); };
-    m.fitBounds(bounds, { padding: [24, 24] });
+    if (box.offsetWidth && box.offsetHeight) m.fitBounds(bounds, { padding: [24, 24], animate: false });
+    else m.setView(bounds.getCenter(), 4);   // 還看不到時先用全貌的縮放，不要停在最大倍率
     if (window.ResizeObserver) { m._ro = new ResizeObserver(() => m._fit()); m._ro.observe(box); }
-    setTimeout(m._fit, 60);
+    // 每次捲到地圖、或切到這個分頁讓地圖出現時，再對位一次
+    if (window.IntersectionObserver) { m._io = new IntersectionObserver(es => { if (es.some(x => x.isIntersecting)) m._fit(); }); m._io.observe(box); }
+    setTimeout(m._fit, 60); setTimeout(m._fit, 600);
   });
 }
 const EQC = l => l >= 7 ? ["#4a148c", "#fff"] : l >= 6.5 ? ["#6a1b9a", "#fff"] : l >= 6 ? ["#9c27b0", "#fff"] : l >= 5.5 ? ["#c62828", "#fff"] : l >= 5 ? ["#e0412b", "#fff"] : l >= 4 ? ["#f08a24", "#1c2a33"] : l >= 3 ? ["#f6c142", "#1c2a33"] : l >= 2 ? ["#f2e86d", "#1c2a33"] : l >= 1 ? ["#c7e9c0", "#1c2a33"] : ["var(--cloth)", "var(--muted)"];
@@ -2145,7 +2152,7 @@ function drawTyEq() {
       <ol class="ty-list"><li class="hd"><span>時間</span><span>強度</span><b>離你</b></li>${rows}</ol></div>`;
   });
   $("ty-home").innerHTML = homeTy; $("ty-home").hidden = !homeTy;
-  TYMAPS.forEach(m => { if (m._ro) m._ro.disconnect(); m.remove(); }); TYMAPS = [];
+  TYMAPS.forEach(m => { if (m._ro) m._ro.disconnect(); if (m._io) m._io.disconnect(); m.remove(); }); TYMAPS = [];
   $("o-ty").hidden = !obsTy; $("ty-body").innerHTML = obsTy;
   $("sky-dot").hidden = !obsTy; paintChips();
   if (obsTy && $("app").dataset.view === "obs") drawTyMaps();
@@ -2185,6 +2192,8 @@ $("eq-bar").addEventListener("click", () => { const q = EQ && EQ.list[0]; if (q)
 async function loadTyEq() {
   const get = f => fetch("data/" + f, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null);
   [TY, EQ] = await Promise.all([get("typhoon.json"), get("quake.json")]);
+  // 最後一筆定位超過 36 小時的颱風（已減弱消散、氣象署不再更新）就不顯示，避免掛著舊資料
+  if (TY && TY.list) TY.list = TY.list.filter(t => { const l = t.past[t.past.length - 1] || t.fc[0]; const ms = l && tms(l.t); return ms && Date.now() - ms < 36 * 3600e3; });
   drawTyEq();
 }
 loadTyEq();
