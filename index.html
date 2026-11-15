@@ -221,11 +221,16 @@ main, .panel-in { zoom: var(--uz); }
 .leaflet-container { zoom: calc(1 / var(--uz)); }
 /* 放大時，本來就很大的數字和一週日期維持原本的實際大小，避免擠出畫面 */
 .row7 { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; }
-.wdate { font-size: calc(18px / var(--uz)) !important; }
+#w-top .wd-s { display: none; }
+/* 大、特大：一週的欄位太窄，日期只寫「幾號」，星期與機率不換行 */
+:root[data-fs]:not([data-fs="1"]) #w-top .wd-l { display: none; }
+:root[data-fs]:not([data-fs="1"]) #w-top .wd-s { display: inline; }
+#w-top .cell > span { white-space: nowrap; }
+:root[data-fs]:not([data-fs="1"]) #w-top .cell > span:last-child { font-size: 13px !important; letter-spacing: -0.02em; }
 .duo { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 16px !important; }
 .duo b { font-size: calc(64px / var(--uz)) !important; }
-.hero-main b { font-size: calc(min(150px, 38vw) / var(--uz)) !important; }
-.hero-side b { font-size: calc(1em / var(--uz) * 1.15); }
+.hero-main > b { font-size: calc(min(150px, 38vw) / var(--uz)) !important; }
+
 #place-btn { min-width: 0; max-width: 72%; } #place-btn #place-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #updated { white-space: nowrap; font-size: calc(1em / var(--uz)); }
 /* 大、特大：首頁四格改成兩排兩格，字才放得下 */
@@ -1451,7 +1456,7 @@ function renderMore(d) {
   };
   const hp = w.map((v, i) => [x(i), y(v.hi)]), lp = w.map((v, i) => [x(i), y(v.lo)]);
   $("w-top").innerHTML = w.map((v, i) =>
-    `<div class="cell${i ? "" : " first"}"><span>${v.label}</span><span class="wdate">${v.date}</span>${icon(v.code, true)}` +
+    `<div class="cell${i ? "" : " first"}"><span><span class="wd-l">${v.label}</span><span class="wd-s">${v.label.replace(/^週/, "").replace(/天$/, "")}</span></span><span class="wdate"><span class="wd-l">${v.date}</span><span class="wd-s">${v.date.split("/")[1]}</span></span>${icon(v.code, true)}` +
     `<span class="${v.prob >= 50 ? "wetpct" : "muted"}">${v.prob == null ? "—" : v.prob + "%"}</span></div>`).join("");
   $("w-chart").innerHTML =
     `<svg viewBox="0 0 100 ${H}" preserveAspectRatio="none" aria-hidden="true">` +
