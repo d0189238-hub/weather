@@ -636,8 +636,8 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 .uvg { padding: 12px 16px 14px; border-radius: 16px; background: color-mix(in srgb, var(--cloth) 55%, var(--paper)); }
 .uvg-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 700; font-size: 16px; }
 .uvg-h span { display: flex; align-items: center; } .uvg-h small { font-size: 13px; font-weight: 400; color: var(--muted); }
-.uvg-n { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 16px; line-height: 1.6; }
-.uvg-n span { white-space: nowrap; } .uvg-n b { font-weight: 600; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.uvg-n { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 18px; font-size: 16px; line-height: 1.6; }
+.uvg-n span { white-space: nowrap; display: flex; justify-content: space-between; min-width: 0; } .uvg-n b { font-weight: 600; margin-left: 4px; font-variant-numeric: tabular-nums; }
 .uvg-n .me { font-weight: 700; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--muted); }
 #o-uv .uvbig, #o-uv .uvg { cursor: pointer; } #o-uv .uvg:active { filter: brightness(1.12); }
 .uvg-more { margin-top: 8px; padding: 4px 0; border: 0; background: none; color: var(--rain); font: inherit; font-size: 14px; cursor: pointer; }
