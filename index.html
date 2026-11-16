@@ -333,8 +333,11 @@ section.next .swing { font-size: 22px; }
 .eq-int { width: 58px; height: 58px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
 .eq-int b { font-family: var(--display); font-weight: 600; font-size: 28px; } .eq-int small { font-size: 13px; }
 .eq-int.sm { width: 42px; height: 42px; } .eq-int.sm b { font-size: 20px; }
-.eq-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.eq-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
 .eq-list li[data-img] { cursor: pointer; }
+.eq-list .eq-t { display: flex; flex-direction: column; min-width: 0; }
+.eq-list .eq-t b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eq-list .chev { font-size: 14px; white-space: nowrap; }
 .eq-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .eq-t .muted { font-size: 15px; }
 .offl { margin: 0 0 8px; padding: 10px 14px; border-radius: 8px; background: var(--cloth); font-size: 16px; }
@@ -437,9 +440,10 @@ main[data-otab="temp"] #sm-kind, main[data-otab="rain"] #sm-kind [data-k="temp"]
 .otabs button.on { border-color: var(--ink); color: var(--ink); font-weight: 700; }
 /* 頂部標題列與分頁列：底色延伸到螢幕兩側，跟背景頂端同色，捲動時不會出現一塊沒貼齊的深色方塊 */
 .top.v-sub, .otabs { background: none !important; isolation: isolate; }
-.top.v-sub::before, .otabs::before { content: ""; position: absolute; z-index: -1; top: 0; bottom: 0; left: 50%; width: calc(100vw / var(--uz)); transform: translateX(-50%);
+.top.v-sub::before { content: ""; position: absolute; z-index: -1; top: 0; bottom: 0; left: 50%; width: 400vw; transform: translateX(-50%);
   background: var(--bg1); }
-.otabs::before { top: -1px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
+.top.v-sub { flex-wrap: wrap; row-gap: 8px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
+.top.v-sub .otabs { position: static; flex: 1 0 100%; padding: 0 0 2px; margin: 0; }
 html { overflow-x: clip; }
 .otabs i { position: absolute; top: 6px; right: 18%; width: 8px; height: 8px; border-radius: 50%; background: #e2484f; }
 .zoom { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 20; background: #000; overflow: hidden; touch-action: none; }
@@ -651,7 +655,7 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 .rank li:first-child .no, .rank li:first-child .v { color: var(--c, var(--ink)); }
 .rank li:first-child .v { font-size: 34px; }
 .top.v-sub { color: var(--ink); justify-content: flex-start; position: sticky; top: 0; z-index: 30; padding: 10px 0; background: var(--paper, #121726); }
-.top.v-sub strong { font-size: 20px; font-weight: 600; min-width: 0; }
+.top.v-sub strong { font-size: 20px; font-weight: 600; min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #back { white-space: nowrap; flex: none; }
 .tap { display: flex; flex-direction: column; gap: var(--s2); cursor: pointer; border-radius: 6px; }
 .chev { display: inline-flex; align-items: center; gap: 4px; align-self: flex-end; color: var(--rain); font-weight: 600; }
@@ -741,7 +745,7 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 .head { display: flex; justify-content: space-between; align-items: center; gap: var(--s2); flex-wrap: wrap; }
 .tabs { display: flex; border: 1px solid var(--ink); border-radius: 6px; overflow: hidden; }
 .tabs button {
-  font: inherit; color: var(--ink); background: transparent; border: 0; padding: 4px 12px; cursor: pointer;
+  flex: 1; white-space: nowrap; font: inherit; color: var(--ink); background: transparent; border: 0; padding: 4px 12px; cursor: pointer;
   border-left: 1px solid var(--ink);
 }
 .tabs button:first-child { border-left: 0; }
@@ -1562,6 +1566,7 @@ function setOtab(t, scroll) {
     if (t === "sky") { TYMAPS.forEach(m => m._fit ? m._fit() : m.invalidateSize()); drawTyMaps(); }
   });
 }
+$("back").parentNode.appendChild($("otabs"));
 $("otabs").addEventListener("click", e => { const b = e.target.closest("[data-t]"); if (b) setOtab(b.dataset.t, true); });
 setTimeout(() => setOtab(otab), 0);
 
