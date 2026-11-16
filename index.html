@@ -743,9 +743,9 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 
 /* 建議 */
 .head { display: flex; justify-content: space-between; align-items: center; gap: var(--s2); flex-wrap: wrap; }
-.tabs { display: flex; border: 1px solid var(--ink); border-radius: 6px; overflow: hidden; }
+.tabs { display: flex; border: 1px solid var(--ink); border-radius: 6px; overflow: hidden; width: 100%; max-width: 280px; }
 .tabs button {
-  flex: 1; white-space: nowrap; font: inherit; color: var(--ink); background: transparent; border: 0; padding: 4px 12px; cursor: pointer;
+  flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: inherit; font-size: 15px !important; color: var(--ink); background: transparent; border: 0; padding: 4px 12px; cursor: pointer;
   border-left: 1px solid var(--ink);
 }
 .tabs button:first-child { border-left: 0; }
@@ -1209,7 +1209,7 @@ function tipsFor(p) {
   ];
 }
 function periods(hours) {
-  const names = { "-1": "清晨前", 0: "今天白天", 1: "今晚", 2: "明天白天", 3: "明晚" };
+  const names = { "-1": "清晨", 0: "今天", 1: "今晚", 2: "明天", 3: "明晚" };
   const map = new Map();
   for (const x of hours) {
     const k = Math.floor((x.day * 24 + x.h - 6) / 12);
