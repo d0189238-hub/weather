@@ -549,6 +549,10 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 .tmdays button.on { border-color: var(--ink); color: var(--ink); }
 .rdays { flex-wrap: wrap; gap: 6px; } .rdays button { font-size: 13px; padding: 4px 10px; }
 .tmdays small { font-size: 11px; font-weight: 500; }
+.tmdays.rdays { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.tmdays.rdays button { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 2px; border-radius: 12px; min-width: 0; }
+.tmdays.rdays b { font-size: 14px; white-space: nowrap; }
+.tmdays.rdays small { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .tmf { margin: 0; }
 .tmf figcaption { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; font-family: var(--body); }
 .tmf figcaption .d { border: 1.5px solid var(--ink); border-radius: 999px; padding: 2px 9px; font-size: 14px; font-weight: 700; }
@@ -2993,7 +2997,10 @@ async function drawRainFc(box) {
   const Q = SM.qpf; await Promise.all([loadDem(), loadTownCoords()]);
   const per = Q.periods.slice(0, 4);
   if (!(SM.rday < per.length)) SM.rday = 0;
-  const lab = p => twH(Date.parse(p.from)).replace(/ \d+ 點$/, "") + " → " + twH(Date.parse(p.to)).replace(/ \d+ 點$/, "");
+  // 四段並排：上行「今天／明天…」，下行「白天／晚上」與時間
+  const lab = p => { const ms = Date.parse(p.from), t = new Date(ms + 8 * 3600e3), h = t.getUTCHours(), d = Math.round((Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) - Math.floor((Date.now() + 8 * 3600e3) / 864e5) * 864e5) / 864e5);
+    const day = d === 0 ? "今天" : d === 1 ? "明天" : d === 2 ? "後天" : (t.getUTCMonth() + 1) + "/" + t.getUTCDate(), night = h >= 18 || h < 6;
+    return `<b>${day}${night ? "晚上" : "白天"}</b><small>${h}–${(h + 12) % 24} 時</small>`; };
   const P0 = per[SM.rday];
   box.innerHTML = `<div class="tmc"><div class="tmdays rdays">${per.map((p, n) => `<button type="button" data-n="${n}" class="${n === SM.rday ? "on" : ""}">${lab(p)}</button>`).join("")}</div><figure class="tmf smf" data-img="data/${P0.img}"><div class="tmw"><div class="tmi"><canvas></canvas></div></div><div class="sm-isl" data-n="0"></div></figure></div>`;
   box.querySelectorAll(".rdays button").forEach(b => b.onclick = e => { e.stopPropagation(); SM.rday = +b.dataset.n; drawRainFc(box); });
