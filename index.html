@@ -1471,7 +1471,7 @@ function renderMore(d) {
   };
   const hp = w.map((v, i) => [x(i), y(v.hi)]), lp = w.map((v, i) => [x(i), y(v.lo)]);
   $("w-top").innerHTML = w.map((v, i) =>
-    `<div class="cell${i ? "" : " first"}"><span><span class="wd-l">${v.label}</span><span class="wd-s">${v.label.replace(/^週/, "").replace(/天$/, "")}</span></span><span class="wdate"><span class="wd-l">${v.date}</span><span class="wd-s">${v.date.split("/")[1]}</span></span>${icon(v.code, true)}` +
+    `<div class="cell${i ? "" : " first"}"><span><span class="wd-l">${v.label}</span><span class="wd-s">${v.label.replace(/^週/, "").replace(/天$/, "")}</span></span><span class="wdate">${v.date.split("/")[1]}日</span>${icon(v.code, true)}` +
     `<span class="${v.prob >= 50 ? "wetpct" : "muted"}">${v.prob == null ? "—" : v.prob + "%"}</span></div>`).join("");
   $("w-chart").innerHTML =
     `<svg viewBox="0 0 100 ${H}" preserveAspectRatio="none" aria-hidden="true">` +
