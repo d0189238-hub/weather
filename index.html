@@ -1941,9 +1941,11 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("panel"
   };
   window.refreshPush = async () => {
     $("push-code-box").hidden = true;
-    if (!ok || !standalone) {
+    // 只有 iPhone／iPad 一定要先加到主畫面；Android（Chrome、三星網際網路）直接在瀏覽器就能開
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (!ok || (ios && !standalone)) {
       $("push-on").hidden = $("push-off").hidden = $("push-test").hidden = true;
-      msg(ok || /iPhone|iPad/.test(navigator.userAgent) ? "要先把這個網頁加到主畫面：在 Safari 按「分享」→「加入主畫面」，再從主畫面的圖示打開，回到這裡開啟（需要 iOS 16.4 以上）。" : "這個瀏覽器不支援網頁通知。");
+      msg(ios ? "要先把這個網頁加到主畫面：在 Safari 按「分享」→「加入主畫面」，再從主畫面的圖示打開，回到這裡開啟（需要 iOS 16.4 以上）。" : "這個瀏覽器不支援網頁通知，請改用 Chrome 或三星網際網路打開。");
       return;
     }
     const a = await api(), sub = await current();
