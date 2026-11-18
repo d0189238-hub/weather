@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>今天曬衣服嗎</title>
+<title>今天帶傘嗎</title>
 <meta name="theme-color" content="#dbe7ee">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="曬衣服嗎">
+<meta name="apple-mobile-web-app-title" content="帶傘嗎">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Display:wght@300;400;500;600&family=Noto+Serif+TC:wght@400;600;700&display=swap" rel="stylesheet">
@@ -1959,7 +1959,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("panel"
   $("push-on").addEventListener("click", async () => {
     try {
       const perm = await Notification.requestPermission();
-      if (perm !== "granted") { msg("通知權限沒有開啟。可以到 iPhone 的「設定」→「通知」→「曬衣服嗎」打開，再回來按一次。"); return; }
+      if (perm !== "granted") { msg("通知權限沒有開啟。可以到 iPhone 的「設定」→「通知」→「帶傘嗎」打開，再回來按一次。"); return; }
       const reg = await navigator.serviceWorker.register("sw.js");
       await navigator.serviceWorker.ready;
       const a = await api();

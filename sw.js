@@ -29,7 +29,7 @@ self.addEventListener("fetch", e => {
 self.addEventListener("push", e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (x) { d = { body: e.data ? e.data.text() : "" }; }
-  e.waitUntil(self.registration.showNotification(d.title || "曬衣服嗎", {
+  e.waitUntil(self.registration.showNotification(d.title || "帶傘嗎", {
     body: d.body || "", tag: d.tag || "rain", icon: "icons/icon-192.png", badge: "icons/icon-192.png", data: { url: d.url || "./" }
   }));
 });

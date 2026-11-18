@@ -1,6 +1,6 @@
 {
-  "name": "今天曬衣服嗎",
-  "short_name": "曬衣服嗎",
+  "name": "今天帶傘嗎",
+  "short_name": "帶傘嗎",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
