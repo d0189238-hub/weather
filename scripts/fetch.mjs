@@ -1037,11 +1037,14 @@ async function main() {
       const pushOne = async (s, payload) => libs.push.sendNotification(s.sub, JSON.stringify({ ...payload, url: site || "./" }),
         { TTL: 3 * 3600, urgency: "normal", vapidDetails: { subject: site || "https://github.com", publicKey: s.pub, privateKey: s.priv } });
       const sendDigest = async (s, sh) => {
-        const F = factsOf(s); if (!F) return;
+        const F = factsOf(s);
+        if (!F) { (status.seen.digestSkip ||= []).push("no facts: " + JSON.stringify((s.places || []).map(p => p.c + p.t))); return; }
         if (digestMode) {
           const k = hash(sh + "|dg|" + digestMode + "|" + todayStr);
           if (!state.sent[k]) {
-            const d = digestFor(s, digestMode); if (!d) return;
+            let d = null;
+            try { d = digestFor(s, digestMode); } catch (e) { (status.seen.digestSkip ||= []).push("error: " + String(e.stack || e).slice(0, 200)); }
+            if (!d) { (status.seen.digestSkip ||= []).push("empty " + digestMode); return; }
             try { await pushOne(s, { title: d.title, body: d.body, tag: "daily" }); state.sent[k] = now; state.fx[sh] = snap(F); digests++; if (!status.seen.digestSample) status.seen.digestSample = d.body; }
             catch (e) { if (e.statusCode !== 404 && e.statusCode !== 410) fail("每日預報通知", (e.statusCode || "") + " " + String(e.body || e.message || "").slice(0, 120)); }
             return;
@@ -1055,7 +1058,7 @@ async function main() {
         try { await pushOne(s, { title: "預報更新", body: ch.join("\n"), tag: "change" }); state.fx[sh] = snap(F); changes++; }
         catch (e) { if (e.statusCode !== 404 && e.statusCode !== 410) fail("預報改變通知", (e.statusCode || "") + " " + String(e.body || e.message || "").slice(0, 120)); }
       };
-      if (preview) { for (const s of subs) { const a = digestFor(s, "am"), b = digestFor(s, "pm"); if (a || b) { status.seen.digestPreview = { am: a && a.body, pm: b && b.body }; break; } } }
+      if (preview) { for (const s of subs) { let a = null, b = null; try { a = digestFor(s, "am"); } catch (e) { status.seen.digestAmErr = String(e.stack || e).slice(0, 300); } try { b = digestFor(s, "pm"); } catch (e) { status.seen.digestPmErr = String(e.stack || e).slice(0, 300); } if (a || b) { status.seen.digestPreview = { am: a && a.body, pm: b && b.body }; break; } } }
       let digests = 0;
       const dead = [];
       let sent = 0, failed = 0;
