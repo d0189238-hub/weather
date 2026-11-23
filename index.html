@@ -1667,6 +1667,7 @@ function countyData(c) {
   if (!dataCache[c]) {
     dataCache[c] = fetch("data/" + FILE[c] + ".json", { cache: "no-cache" })
       .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(j => { dataCache[c].done = true; return j; })
       .catch(e => { delete dataCache[c]; throw e; });
   }
   return dataCache[c];
@@ -1746,7 +1747,7 @@ const pname = p => p.c + p.t;
 const seedOf = s => [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7);
 let FC = null, FCGEO = null, fcKind = "wx", fcIdx = 0, fcTimer = null, SM = null, smKind = "wx";
 let LLAB = null, TC = null, LMEL = null, LEQ = null, LFAULT = null, eqMarks = {};
-let PAST = null, NC = null, TYMAPS = [], LMAP = null, LOV = null, LBASE = {}, LMARK = null, RG = null, rgMode = false, baseKind = "photo";
+let obsDirty = true, PAST = null, NC = null, TYMAPS = [], LMAP = null, LOV = null, LBASE = {}, LMARK = null, RG = null, rgMode = false, baseKind = "photo";
 let TY = null, EQ = null, WARN = null, OB = null, satKind = null, rankKind = "hi", here = null;
 let places = [{ c: "臺北市", t: "中正區" }], active = 0, editing = false, liveOK = false;
 try {
@@ -1779,18 +1780,23 @@ const savePlaces = () => {
 
 async function load() {
   const p = places[active], c = COUNTY[p.c];
-  here = { lat: c.lat, lon: c.lon }; if (OB) drawObs();
+  // 觀測頁的地圖很耗時，只有正在看觀測頁才重畫；回到觀測頁時再補畫
+  const onObs = () => $("app").dataset.view === "obs";
+  here = { lat: c.lat, lon: c.lon }; obsDirty = true; if (OB && onObs()) { drawObs(); obsDirty = false; }
   $("place-name").textContent = pname(p);
   renderDots();
   if (WARN) drawWarn();
   if (TY || EQ) drawTyEq();
   if ($("app").dataset.view !== "home") $("sub-title").textContent = pname(p) + "・" + VIEWS[$("app").dataset.view];
   tab = 0;
-  render(sample(c.lat, seedOf(pname(p))));            // 先有畫面
+  // 這個縣市的資料已經抓過就直接畫，不先畫一次示範畫面
+  if (!dataCache[p.c] || !dataCache[p.c].done) render(sample(c.lat, seedOf(pname(p))));
   try {
     const D = await countyData(p.c), T = D.towns[p.t];
-    if (T && places[active] === p) { const d = fromData(T, D); liveOK = true; render(d); if (T.lat != null && T.lon != null) { here = { lat: T.lat, lon: T.lon }; drawObs(); if (TY || EQ) drawTyEq(); } }
+    if (T && places[active] === p) { const d = fromData(T, D); liveOK = true; render(d); if (T.lat != null && T.lon != null) { here = { lat: T.lat, lon: T.lon }; if (OB && onObs()) { drawObs(); obsDirty = false; } if (TY || EQ) drawTyEq(); } }
   } catch (e) { /* 讀不到就留在示範資料 */ }
+  // 順手先抓其他地點的資料，滑過去時就不用等
+  setTimeout(() => places.forEach(q => { if (COUNTY[q.c]) countyData(q.c).catch(() => {}); }), 800);
 }
 
 /* ---------- 左右滑動換地點 ---------- */
@@ -1879,7 +1885,7 @@ function setView(v) {
   $("app").dataset.view = v;
   if (v !== "home") $("sub-title").textContent = pname(places[active]) + "・" + VIEWS[v];
   window.scrollTo(0, 0);
-  if (v === "obs" && typeof ensureMap === "function") { ensureMap(); showSmall(); drawTyMaps(); }
+  if (v === "obs" && typeof ensureMap === "function") { if (obsDirty && OB) { drawObs(); obsDirty = false; } ensureMap(); showSmall(); drawTyMaps(); }
 }
 function go(v) { try { location.hash = v === "home" ? "" : v; } catch (e) {} setView(v); }
 window.addEventListener("hashchange", () => setView(location.hash.slice(1)));
