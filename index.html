@@ -550,6 +550,7 @@ details.rb .rb-lab { font-size: 15px; font-weight: 600; }
 .rdays { flex-wrap: wrap; gap: 6px; } .rdays button { font-size: 13px; padding: 4px 10px; }
 .tmdays small { font-size: 11px; font-weight: 500; }
 .tmdays.rdays { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.tmdays.tslots { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .tmdays.rdays button { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 2px; border-radius: 12px; min-width: 0; }
 .tmdays.rdays b { font-size: 17px; white-space: nowrap; }
 .tmdays.rdays small { font-size: 14px; color: var(--muted); white-space: nowrap; }
@@ -2908,20 +2909,22 @@ async function drawTempCompare(box) {
   const WKN = ["日", "一", "二", "三", "四", "五", "六"], dayLab = ms => { const t = tw(ms); return `週${WKN[t.getUTCDay()]}<small>(${t.getUTCDate()}日)</small>`; };
   const mine = places.slice(0, 4).map(p => ({ name: p.t.length > 2 ? p.t.replace(/[區鄉鎮市]$/, "") : p.t, c: p.c, t: p.t, me: true }));
   const cities = TMAP_CITIES.map(([n, c, t]) => ({ name: n, c, t })).filter(x => !mine.some(m => m.c === x.c && m.t === x.t));
-  if (!(SM.tday < two.length)) SM.tday = 0;
-  box.innerHTML = `<div class="tmc"><div class="tmdays">${two.map((p, n) => `<button type="button" data-n="${n}" class="${n === SM.tday ? "on" : ""}">${dayLab(p[1])} 中午</button>`).join("")}</div><figure class="tmf"><div class="tmw"><div class="tmi"><canvas></canvas></div></div></figure></div>`;
+  // 可選時段：清晨（最冷）、中午（最熱）、晚上，各取接下來的，最多 6 個
+  const PART = h => h >= 5 && h <= 7 ? ["清晨", 0] : h >= 11 && h <= 14 ? ["中午", 1] : h >= 20 && h <= 22 ? ["晚上", 2] : null;
+  const now = Date.now(), slotSeen = new Set(), slots = [];
+  fc.times.forEach((t, i) => { const ms = Date.parse(t); if (ms < now - 90 * 60e3) return; const pt = PART(tw(ms).getUTCHours()); if (!pt) return; const k = tw(ms).toISOString().slice(0, 10) + pt[1]; if (slotSeen.has(k)) return; slotSeen.add(k); slots.push({ i, ms, part: pt[0] }); });
+  const slotLab = sl => { const d = Math.round((Math.floor((sl.ms + 8 * 3600e3) / 864e5) - Math.floor((now + 8 * 3600e3) / 864e5))), day = d === 0 ? "今天" : d === 1 ? "明天" : d === 2 ? "後天" : dayLab(sl.ms).replace(/<small>.*<\/small>/, ""); return `<b>${day}${sl.part}</b><small>${tw(sl.ms).getUTCHours()} 時</small>`; };
+  const shown = slots.length ? slots.slice(0, 6) : two.map(p => ({ i: p[0], ms: p[1], part: "中午" }));
+  if (!(SM.tday < shown.length)) SM.tday = shown.findIndex(x => x.part === "中午"); if (SM.tday < 0) SM.tday = 0;
+  box.innerHTML = `<div class="tmc"><div class="tmdays rdays tslots">${shown.map((sl, n) => `<button type="button" data-n="${n}" class="${n === SM.tday ? "on" : ""}">${slotLab(sl)}</button>`).join("")}</div><figure class="tmf"><div class="tmw"><div class="tmi"><canvas></canvas></div></div></figure></div>`;
   box.querySelectorAll(".tmdays button").forEach(b => b.onclick = () => { SM.tday = +b.dataset.n; drawTempCompare(box); });
-  const vals = [];
-  two.forEach((p, n) => {
-    const [i] = p;
-    const f = n === SM.tday ? box.querySelector(".tmf") : null, M = f ? tmapDraw(f.querySelector("canvas"), ptsOf(i)) : { P: () => [0, 0] };
-    if (!M) return;
-    const mk = x => { const co = TCO[x.c] && TCO[x.c][x.t], v = valAt(i, x.c, x.t); return co && v != null ? { ...x, lat: co[0], lon: co[1], v } : null; };
-    const mineL = mine.map(mk).filter(Boolean), labs = cities.map(mk).filter(Boolean).filter(L => tmapFar(L.lat, L.lon, mineL)).concat(mineL);
-    if (n === 1 && vals[0]) labs.forEach(L => { const a = vals[0].find(z => z.c === L.c && z.t === L.t); if (a) L.delta = L.v - a.v; });
-    vals.push(labs);
-    if (f) tmapLabels(f.querySelector(".tmi"), M, labs);
-  });
+  const labsAt = i => { const mk = x => { const co = TCO[x.c] && TCO[x.c][x.t], v = valAt(i, x.c, x.t); return co && v != null ? { ...x, lat: co[0], lon: co[1], v } : null; };
+    const mineL = mine.map(mk).filter(Boolean); return cities.map(mk).filter(Boolean).filter(L => tmapFar(L.lat, L.lon, mineL)).concat(mineL); };
+  const sel = shown[SM.tday], f = box.querySelector(".tmf"), M = tmapDraw(f.querySelector("canvas"), ptsOf(sel.i));
+  if (M) tmapLabels(f.querySelector(".tmi"), M, labsAt(sel.i));
+  // 大標題仍比較接下來兩個中午
+  const vals = two.map(p => labsAt(p[0]));
+  if (vals.length === 2) vals[1].forEach(L => { const a = vals[0].find(z => z.c === L.c && z.t === L.t); if (a) L.delta = L.v - a.v; });
   // 大標題：兩天比較
   const hd = $("sm-head");
   if (vals.length === 2) {
